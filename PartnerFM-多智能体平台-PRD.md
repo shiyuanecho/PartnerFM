@@ -8,7 +8,7 @@
 
 ## 1. 问题陈述
 
-**用户场景**：拾元（独立开发者 + 幼教老师）在 PartnerFM 中需要通过"对话"的方式，灵活调度多个 AI 智能体来完成复杂工作流——例如"让代码助手写一个排序算法"、"让文案助手把它写成博客"、"让数据分析师分析用户行为数据"——并在同一个平台内查看所有产物（MD 文档、HTML 页面、SVG 图表、PNG 图片）。
+**用户场景**：用户在 PartnerFM 中需要通过"对话"的方式，灵活调度多个 AI 智能体来完成复杂工作流——例如"让代码助手写一个排序算法"、"让文案助手把它写成博客"、"让数据分析师分析用户行为数据"——并在同一个平台内查看所有产物（MD 文档、HTML 页面、SVG 图表、PNG 图片）。
 
 **当前缺陷**：
 - 当前 Agent 是**单体的**，只有一个上下文循环，无法在同一个对话中调用不同的"角色+模型+工具集"组合
@@ -222,13 +222,13 @@
 {
   "mappings": [
     {
-      "projectId": "learn-chinese",
+      "projectId": "project-alpha",
       "projectName": "Learn Chinese（汉字学习）",
       "projectIcon": "🀄",
       "description": "面向海外用户的汉字学习应用，Cloudflare 全栈，Paddle 支付",
       "agentIds": ["code-assistant", "writing-assistant"],
       "defaultAgentId": "code-assistant",
-      "workspaceDir": "/Users/shiyuanchang/learn-chinese",
+      "workspaceDir": "/path/to/project-alpha",
       "outputDir": "产出/LearnChinese"
     },
     {
@@ -238,18 +238,18 @@
       "description": "多人在线聊天智能体工作站，本平台自身",
       "agentIds": ["code-assistant", "drawing-assistant", "data-analyst"],
       "defaultAgentId": "code-assistant",
-      "workspaceDir": "/Users/shiyuanchang/PartnerFM",
+      "workspaceDir": "/path/to/PartnerFM",
       "outputDir": "产出/PartnerFM"
     },
     {
       "projectId": "word-learning",
-      "projectName": "场景识字工具",
+      "projectName": "示例项目",
       "projectIcon": "📖",
       "description": "PWA 架构 0-6 岁幼儿教育 App",
       "agentIds": ["code-assistant", "drawing-assistant", "writing-assistant"],
       "defaultAgentId": "code-assistant",
-      "workspaceDir": "/Users/shiyuanchang/识字/interactive-word-app",
-      "outputDir": "产出/识字工具"
+      "workspaceDir": "/path/to/project-alpha/app",
+      "outputDir": "产出/示例工具"
     }
   ],
   "activeProjectId": "partnerfm"
@@ -384,12 +384,12 @@
 {
   "mappings": [
     {
-      "projectId": "learn-chinese",
+      "projectId": "project-alpha",
       "projectName": "Learn Chinese",
       "projectIcon": "🀄",
       "agentIds": ["code-assistant", "writing-assistant"],
       "defaultAgentId": "code-assistant",
-      "workspaceDir": "/Users/shiyuanchang/learn-chinese",
+      "workspaceDir": "/path/to/project-alpha",
       "outputDir": "产出/LearnChinese"
     }
   ],
@@ -405,29 +405,29 @@
 
 | ID | 用户故事 | 验收标准 |
 |----|---------|---------|
-| US-001 | **作为拾元**，我希望能创建一个新的智能体（配置名称、角色提示词、模型、工具白名单），以便为不同任务场景准备专用助手 | [ ] 在 UI 中看到"新建 Agent"入口<br>[ ] 填写名称、选择角色提示词（可复用现有 Role）、选择模型、勾选可用工具<br>[ ] 保存后 Agent 出现在 Agent 列表中 |
-| US-002 | **作为拾元**，我在与主 Agent 对话时，可以说"调代码助手帮我写一个排序算法"，主 Agent 应能调用代码助手并返回结果 | [ ] 主 Agent 工具列表中有 `invoke_agent` 工具<br>[ ] 子 Agent 独立执行，使用其配置的模型和提示词<br>[ ] 子 Agent 的结果返回给主 Agent，主 Agent 继续加工 |
-| US-003 | **作为拾元**，当子 Agent 产出一个文件（如 sorting-algorithm.md）时，该文件应自动保存到工作区对应目录（如 `产出/代码/sorting-algorithm.md`） | [ ] 文件自动创建在工作区<br>[ ] 前端聊天流收到 `artifact` 事件<br>[ ] 文件管理模块自动刷新，定位到该文件 |
-| US-004 | **作为拾元**，我希望在一个页面上看清"哪个智能体负责哪个项目"：表格列出 Agent 名称、模型、项目归属、状态 | [ ] 新增 Agent 管理页面<br>[ ] 表格包含：图标、名称、所属项目、模型、工具数、状态<br>[ ] 可编辑映射关系（将 Agent 关联/取消关联到项目） |
-| US-005 | **作为拾元**，我可以编辑已有 Agent 的配置（改提示词、换模型、增减工具） | [ ] 点击 Agent 进入编辑模式<br>[ ] 修改后保存，下次调用生效 |
-| US-006 | **作为拾元**，我可以删除一个不再需要的 Agent | [ ] 删除操作需二次确认<br>[ ] 删除后不再出现在 Agent 列表中<br>[ ] 关联的 Project-Agent 映射自动清除 |
+| US-001 | **作为用户**，我希望能创建一个新的智能体（配置名称、角色提示词、模型、工具白名单），以便为不同任务场景准备专用助手 | [ ] 在 UI 中看到"新建 Agent"入口<br>[ ] 填写名称、选择角色提示词（可复用现有 Role）、选择模型、勾选可用工具<br>[ ] 保存后 Agent 出现在 Agent 列表中 |
+| US-002 | **作为用户**，我在与主 Agent 对话时，可以说"调代码助手帮我写一个排序算法"，主 Agent 应能调用代码助手并返回结果 | [ ] 主 Agent 工具列表中有 `invoke_agent` 工具<br>[ ] 子 Agent 独立执行，使用其配置的模型和提示词<br>[ ] 子 Agent 的结果返回给主 Agent，主 Agent 继续加工 |
+| US-003 | **作为用户**，当子 Agent 产出一个文件（如 sorting-algorithm.md）时，该文件应自动保存到工作区对应目录（如 `产出/代码/sorting-algorithm.md`） | [ ] 文件自动创建在工作区<br>[ ] 前端聊天流收到 `artifact` 事件<br>[ ] 文件管理模块自动刷新，定位到该文件 |
+| US-004 | **作为用户**，我希望在一个页面上看清"哪个智能体负责哪个项目"：表格列出 Agent 名称、模型、项目归属、状态 | [ ] 新增 Agent 管理页面<br>[ ] 表格包含：图标、名称、所属项目、模型、工具数、状态<br>[ ] 可编辑映射关系（将 Agent 关联/取消关联到项目） |
+| US-005 | **作为用户**，我可以编辑已有 Agent 的配置（改提示词、换模型、增减工具） | [ ] 点击 Agent 进入编辑模式<br>[ ] 修改后保存，下次调用生效 |
+| US-006 | **作为用户**，我可以删除一个不再需要的 Agent | [ ] 删除操作需二次确认<br>[ ] 删除后不再出现在 Agent 列表中<br>[ ] 关联的 Project-Agent 映射自动清除 |
 
 ### P1 — 重要但不阻塞
 
 | ID | 用户故事 | 验收标准 |
 |----|---------|---------|
-| US-007 | **作为拾元**，我希望看到每个 Agent 的调用历史——什么时候被调用了、做了什么、产出了什么文件 | [ ] Agent 详情页显示历史调用记录<br>[ ] 每条记录显示：调用时间、调用者、任务、产物列表 |
-| US-008 | **作为拾元**，在聊天中，我希望看到子 Agent 的思考过程"迭代状态"——就像主 Agent 一样显示 tool_call 和 tool_result 卡片 | [ ] 子 Agent 的 thinking/tool_call/tool_result 都通过 SSE 透传到前端<br>[ ] 前端用缩进/嵌套样式区分主 Agent 和子 Agent 的消息 |
-| US-009 | **作为拾元**，我希望可以设置"每个 Agent 在哪个工作区目录下产出的文件" | [ ] Agent 配置页有 `allowedOutputDir` 字段<br>[ ] Agent 执行时的工作区绑定到所属 Project 的 workspaceDir |
-| US-010 | **作为拾元**，我想预览子 Agent 产出的 HTML/SVG 文件：在聊天消息内显示预览卡片 | [ ] 当 artifact 类型为 html/svg 时，聊天消息内嵌 iframe 或 SVG 直接渲染 |
+| US-007 | **作为用户**，我希望看到每个 Agent 的调用历史——什么时候被调用了、做了什么、产出了什么文件 | [ ] Agent 详情页显示历史调用记录<br>[ ] 每条记录显示：调用时间、调用者、任务、产物列表 |
+| US-008 | **作为用户**，在聊天中，我希望看到子 Agent 的思考过程"迭代状态"——就像主 Agent 一样显示 tool_call 和 tool_result 卡片 | [ ] 子 Agent 的 thinking/tool_call/tool_result 都通过 SSE 透传到前端<br>[ ] 前端用缩进/嵌套样式区分主 Agent 和子 Agent 的消息 |
+| US-009 | **作为用户**，我希望可以设置"每个 Agent 在哪个工作区目录下产出的文件" | [ ] Agent 配置页有 `allowedOutputDir` 字段<br>[ ] Agent 执行时的工作区绑定到所属 Project 的 workspaceDir |
+| US-010 | **作为用户**，我想预览子 Agent 产出的 HTML/SVG 文件：在聊天消息内显示预览卡片 | [ ] 当 artifact 类型为 html/svg 时，聊天消息内嵌 iframe 或 SVG 直接渲染 |
 
 ### P2 — 未来考虑
 
 | ID | 用户故事 | 验收标准 |
 |----|---------|---------|
-| US-011 | **作为拾元**，我希望多个子 Agent 可以并行执行（如"同时查资料 + 写代码 + 审代码"） | [ ] invoke_agent 支持 `mode: "parallel"`<br>[ ] 多个子 Agent 同时运行，结果合并返回 |
-| US-012 | **作为拾元**，我希望可以编排一个工作流模板（如"写代码 → 审查 → 生成文档"）并一键触发 | [ ] 创建 Agent 工作流模板<br>[ ] 模板有向无环图（DAG）式编排 |
-| US-013 | **作为拾元**，Agent 的资产可以导出/导入为 JSON 文件，方便分享 | [ ] 导出按钮生成 `.partnerfm-agent.json` 文件<br>[ ] 导入自动注册到 Agent 列表 |
+| US-011 | **作为用户**，我希望多个子 Agent 可以并行执行（如"同时查资料 + 写代码 + 审代码"） | [ ] invoke_agent 支持 `mode: "parallel"`<br>[ ] 多个子 Agent 同时运行，结果合并返回 |
+| US-012 | **作为用户**，我希望可以编排一个工作流模板（如"写代码 → 审查 → 生成文档"）并一键触发 | [ ] 创建 Agent 工作流模板<br>[ ] 模板有向无环图（DAG）式编排 |
+| US-013 | **作为用户**，Agent 的资产可以导出/导入为 JSON 文件，方便分享 | [ ] 导出按钮生成 `.partnerfm-agent.json` 文件<br>[ ] 导入自动注册到 Agent 列表 |
 
 ---
 
@@ -549,11 +549,11 @@
 
 | # | 问题 | 回答者 | 是否阻塞 |
 |---|------|--------|---------|
-| 1 | 子 Agent 是否继承父 Agent 的 api_key？还是每个 Agent 独立配置 API Key？ | 拾元 | 是 |
-| 2 | 子 Agent 是否共享父 Agent 的附件/上传文件？ | 拾元 | 否 |
-| 3 | 产物自动保存的文件命名规则：时间戳前缀 vs 用户指定？ | 拾元 | 否 |
-| 4 | 子 Agent 的 SSE 事件是否要精简（只透传关键事件）还是完整透传？ | 拾元 | 否 |
-| 5 | Project-Agent 映射表的工作区路径，是否支持多个不连续路径？ | 拾元 | 否 |
+| 1 | 子 Agent 是否继承父 Agent 的 api_key？还是每个 Agent 独立配置 API Key？ | 用户 | 是 |
+| 2 | 子 Agent 是否共享父 Agent 的附件/上传文件？ | 用户 | 否 |
+| 3 | 产物自动保存的文件命名规则：时间戳前缀 vs 用户指定？ | 用户 | 否 |
+| 4 | 子 Agent 的 SSE 事件是否要精简（只透传关键事件）还是完整透传？ | 用户 | 否 |
+| 5 | Project-Agent 映射表的工作区路径，是否支持多个不连续路径？ | 用户 | 否 |
 
 ---
 

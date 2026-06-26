@@ -123,7 +123,7 @@ DEFAULT_CLI = {
         "name": "WorkBuddy",
         "path": "node workbuddy-sidecar/server.js",
         "description": "腾讯 AI Agent SDK 侧车，已桥接到 PartnerFM。启动侧车后，在模型选择器选「WorkBuddy Agent」使用。",
-        "tutorial": "## 架构\n\nWorkBuddy 是独立 Node.js 进程，通过 SSE 桥接到 PartnerFM。\n\n## 启动方式\n\n```bash\ncd /Users/shiyuanchang/PartnerFM/workbuddy-sidecar\nnpm install\nnode server.js\n```\n\n## 在 PartnerFM 中调用\n\n**方式一（直接）：** 聊天窗口模型选择器选「WorkBuddy Agent」，直接对话。\n**方式二（调度）：** 在聊天中说「让 WorkBuddy 帮我 xxx」。"
+        "tutorial": "## 架构\n\nWorkBuddy 是独立 Node.js 进程，通过 SSE 桥接到 PartnerFM。\n\n## 启动方式\n\n```bash\ncd workbuddy-sidecar\nnpm install\nnode server.js\n```\n\n## 在 PartnerFM 中调用\n\n**方式一（直接）：** 聊天窗口模型选择器选「WorkBuddy Agent」，直接对话。\n**方式二（调度）：** 在聊天中说「让 WorkBuddy 帮我 xxx」。"
     }
 }
 

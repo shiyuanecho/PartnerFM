@@ -16,7 +16,7 @@ Python 后端不能直接调用 Node.js SDK，所以加一个**侧车进程**做
 ## 第一步：启动侧车
 
 ```bash
-cd /Users/shiyuanchang/PartnerFM/workbuddy-sidecar
+cd workbuddy-sidecar
 
 # 安装依赖
 npm install
@@ -224,10 +224,10 @@ function updateLastAssistantMessage(text, msgIdx) {
 
 ```bash
 # 终端 1：启动侧车
-cd /Users/shiyuanchang/PartnerFM/workbuddy-sidecar && node server.js
+cd workbuddy-sidecar && node server.js
 
 # 终端 2：启动 PartnerFM
-cd /Users/shiyuanchang/PartnerFM && python3 server.py
+cd .. && python3 server.py
 ```
 
 然后在浏览器打开 `http://localhost:8765`，在模型选择器里选 **WorkBuddy Agent**，即可使用。
