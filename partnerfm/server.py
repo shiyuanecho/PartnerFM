@@ -68,6 +68,10 @@ USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
 HOST = '127.0.0.1'
 PORT = 8765
 
+# Agent 文件变更追踪：{workspace_path: {relative_path: timestamp}}
+_file_changes = {}
+CHANGES_TTL = 3600  # 红点 1 小时后自动过期
+
 # 文本类文件后缀白名单（索引/search 共用）
 TEXT_EXTS = {'.md','.txt','.markdown','.html','.htm','.json','.js','.ts','.jsx','.tsx',
              '.py','.rb','.go','.rs','.java','.c','.cpp','.h','.hpp','.css','.scss',
@@ -657,6 +661,46 @@ def _get_logs(limit=100, agent_id=None, status=None, before=None):
     if before:
         logs = [l for l in logs if l.get('timestamp', '') < before]
     return logs[-limit:]
+
+# ===== Agent 文件变更追踪 =====
+
+def _track_file_change(workspace, rel_path):
+    """记录一个文件被 Agent 修改（用于前端红点通知）"""
+    global _file_changes
+    now = time.time()
+    # 清理过期条目
+    _file_changes = {w: {p: ts for p, ts in paths.items() if now - ts < CHANGES_TTL}
+                     for w, paths in _file_changes.items()}
+    if workspace not in _file_changes:
+        _file_changes[workspace] = {}
+    _file_changes[workspace][rel_path] = now
+
+def _get_file_changes(workspace=None):
+    """获取变更文件列表，workspace 为空则返回所有"""
+    global _file_changes
+    now = time.time()
+    # 清理过期
+    _file_changes = {w: {p: ts for p, ts in paths.items() if now - ts < CHANGES_TTL}
+                     for w, paths in list(_file_changes.items())}
+    _file_changes = {w: paths for w, paths in _file_changes.items() if paths}
+    if workspace:
+        changes = _file_changes.get(workspace, {})
+        return [{'path': p, 'time': ts} for p, ts in sorted(changes.items(), key=lambda x: x[1], reverse=True)]
+    return {w: [{'path': p, 'time': ts} for p, ts in sorted(paths.items(), key=lambda x: x[1], reverse=True)]
+            for w, paths in _file_changes.items()}
+
+def _clear_file_changes(workspace, path):
+    """清除指定路径的红点，path 为文件夹路径时可清除该及其下所有文件"""
+    global _file_changes
+    if workspace not in _file_changes:
+        return
+    changes = _file_changes[workspace]
+    # 路径匹配：精确或前缀（文件夹包含子文件）
+    to_remove = [p for p in changes if p == path or p.startswith(path.rstrip('/') + '/')]
+    for p in to_remove:
+        del changes[p]
+    if not changes:
+        del _file_changes[workspace]
 
 # ===== 用量追踪 =====
 
@@ -1597,6 +1641,24 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json(_load_json(SKILLS_FILE, DEFAULT_SKILLS))
         if self.path == '/api/roles':
             return self._serve_json(_load_json(ROLES_FILE, DEFAULT_ROLES))
+        # Agent 文件变更红点通知
+        if self.path == '/api/file-changes':
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            workspace = qs.get('workspace', [None])[0]
+            return self._serve_json({'changes': _get_file_changes(workspace)})
+        if self.path == '/api/file-changes/clear' and self.command == 'POST':
+            body = self._read_body()
+            try:
+                data = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                return self._serve_json({'error': 'Invalid JSON'}, 400)
+            workspace = data.get('workspace', '')
+            path = data.get('path', '')
+            if not workspace or not path:
+                return self._serve_json({'error': 'Missing workspace or path'}, 400)
+            _clear_file_changes(workspace, path)
+            return self._serve_json({'ok': True})
         if self.path == '/api/agent-config':
             return self._serve_json({
                 'tools': ['list_dir', 'read_file', 'write_file', 'search_files',
@@ -2861,6 +2923,8 @@ class Handler(SimpleHTTPRequestHandler):
                     os.makedirs(parent, exist_ok=True)
                     with open(p, 'w', encoding='utf-8') as f:
                         f.write(args['content'])
+                    rel = os.path.relpath(p, wpath)
+                    _track_file_change(wpath, rel)
                     return f'文件已写入：{args["path"]}'
 
                 elif name == 'search_files':

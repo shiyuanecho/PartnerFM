@@ -351,6 +351,24 @@ body {
 .tree-item.depth-2 { padding-left: 52px; }
 .tree-item.depth-3 { padding-left: 66px; }
 
+/* Agent 文件变更红点 */
+.tree-item .change-dot {
+  display: none;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #ff3b30;
+  flex-shrink: 0;
+  margin-left: 4px;
+  box-shadow: 0 0 4px rgba(255,59,48,0.5);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.tree-item.has-changes .change-dot { display: inline-block; }
+.tree-item.has-changes .item-name { font-weight: 500; }
+
 /* 拖拽移动 */
 .tree-item.dragging {
   opacity: 0.35;
@@ -3291,6 +3309,8 @@ const state = {
   closedTabs: [],
   allFiles: [],      // 扁平文件列表，快速搜索用
   expandedNodes: new Set(), // 树中展开的子文件夹 handle
+  changedPaths: new Set(), // Agent 修改过的文件相对路径集合（红点通知）
+  activeWorkspace: '',     // 当前活跃的工作区路径
 };
 
 // ========== DOM 引用（声明式映射 + 启动校验，防漏加属性）==========
@@ -4766,6 +4786,41 @@ function refreshAllFiles() {
   }
 }
 
+// ========== Agent 文件变更红点 ==========
+
+async function checkFileChanges() {
+  if (!state.activeWorkspace) return;
+  try {
+    const resp = await fetch('/api/file-changes?workspace=' + encodeURIComponent(state.activeWorkspace));
+    const data = await resp.json();
+    const changes = data.changes || [];
+    state.changedPaths = new Set(changes.map(c => c.path));
+    if (state.changedPaths.size > 0) renderAll();
+  } catch(e) {
+    // 静默失败，红点非关键功能
+  }
+}
+
+async function clearFileChangeDot(nodePath) {
+  if (!state.activeWorkspace) return;
+  // 从本地状态中移除
+  const toRemove = [nodePath];
+  // 如果是文件夹，也清除所有子文件
+  for (const p of state.changedPaths) {
+    if (p.startsWith(nodePath + '/')) toRemove.push(p);
+  }
+  for (const p of toRemove) state.changedPaths.delete(p);
+  renderAll();
+  // 通知服务端
+  try {
+    await fetch('/api/file-changes/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace: state.activeWorkspace, path: nodePath })
+    });
+  } catch(e) {}
+}
+
 function collectFiles(nodes, folderName, folderHandle, result) {
   for (const node of nodes) {
     result.push({
@@ -4986,7 +5041,7 @@ async function loadNodeChildren(node) {
   if (_folder) applyChildOrder(_folder, node, node.children);
 }
 
-function renderTreeNodes(nodes, container, filter) {
+function renderTreeNodes(nodes, container, filter, parentPath = '') {
   for (const node of nodes) {
     // 过滤
     if (filter && !node.name.toLowerCase().includes(filter)) {
@@ -5046,13 +5101,30 @@ function renderTreeNodes(nodes, container, filter) {
     nameEl.className = 'item-name';
     nameEl.textContent = node.name;
 
+    // Agent 变更红点
+    const dot = document.createElement('span');
+    dot.className = 'change-dot';
+
+    // 计算本节点在工作区内的相对路径
+    const nodePath = parentPath ? parentPath + '/' + node.name : node.name;
+    const hasChanges = state.changedPaths.has(nodePath) ||
+      // 文件夹：检查是否有子文件变更
+      (isDir && [...state.changedPaths].some(p => p.startsWith(nodePath + '/')));
+
     item.appendChild(chevron);
     item.appendChild(icon);
     item.appendChild(nameEl);
+    item.appendChild(dot);
+
+    if (hasChanges) item.classList.add('has-changes');
 
     // 点击
     item.addEventListener('click', async (e) => {
       e.stopPropagation();
+      // 如果有红点，点击时清除
+      if (hasChanges) {
+        await clearFileChangeDot(nodePath);
+      }
       if (isDir) {
         // 切换展开/折叠
         if (state.expandedNodes.has(node.handle)) {
@@ -5174,7 +5246,7 @@ function renderTreeNodes(nodes, container, filter) {
     if (isDir && isExpanded && node.children && node.children.length > 0) {
       const childWrap = document.createElement('div');
       childWrap.className = 'folder-children open';
-      renderTreeNodes(node.children, childWrap, filter);
+      renderTreeNodes(node.children, childWrap, filter, nodePath);
       container.appendChild(childWrap);
     }
   }
@@ -9962,6 +10034,7 @@ async function sendChat() {
     messages.push({ role: 'user', content: userContent });
 
     const workspace = resolveAutoWorkspace(session);
+    state.activeWorkspace = workspace || '';
     const ctxHasFiles = ctxText && ctxText.length > 0;
 
     // 判断引擎类型
@@ -9990,6 +10063,7 @@ async function sendChat() {
         addChatMessage('error', '❌ ' + (err.error || '请求失败 ' + resp.status), true);
       } else if (etype === 'agent') {
         await handleAgentStream(resp, session, abortSignal);
+        checkFileChanges();
       } else {
         await handleChatStream(resp, session, abortSignal);
       }
@@ -10017,6 +10091,7 @@ async function sendChat() {
         addChatMessage('error', '❌ ' + (err.error || '请求失败 ' + resp.status), true);
       } else if (useAgent) {
         await handleAgentStream(resp, session, abortSignal);
+        checkFileChanges();
       } else {
         await handleChatStream(resp, session, abortSignal);
       }
@@ -10032,6 +10107,7 @@ async function sendChat() {
     chatAbortMap.delete(sessionId);
     refreshSendBtnUI();
     inputEl.focus();
+    checkFileChanges(); // 即使出错/打断，已产生的文件变更也要显示红点
   }
   saveChatSessions();
 }
