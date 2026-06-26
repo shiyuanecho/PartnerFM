@@ -38,7 +38,7 @@ Mac 用户也可双击 `启动.command`。
 - **文件操作** — 新建/重命名/删除，右键菜单
 - **IndexedDB 持久化** — 关闭后重新打开自动恢复
 
-### 🤖 模型管理（Hermes 风格）
+### 🤖 模型管理
 - **Provider 注册表** — 内置 302.AI、DeepSeek、OpenAI、Anthropic、智谱 GLM、通义千问、Moonshot
 - **模型元数据** — 每个模型展示上下文长度和价格
 - **302.AI 聚合 API** — 一把 Key 访问 50+ 模型
