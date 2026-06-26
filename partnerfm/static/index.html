@@ -10693,7 +10693,16 @@ function initAnnotation() {
   let tbDrag = null;
   toolbar.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button, input')) return; // 不拦截按钮和滑块
-    tbDrag = { startX: e.clientX, startY: e.clientY, left: toolbar.offsetLeft, top: toolbar.offsetTop };
+    const r = toolbar.getBoundingClientRect();
+    const parentRect = toolbar.offsetParent.getBoundingClientRect();
+    tbDrag = {
+      startX: e.clientX, startY: e.clientY,
+      left: r.left - parentRect.left,
+      top: r.top - parentRect.top,
+    };
+    toolbar.style.left = tbDrag.left + 'px';
+    toolbar.style.top = tbDrag.top + 'px';
+    toolbar.style.transform = 'none'; // 取消居中 transform，改用 left/top 直接定位
     toolbar.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -10701,7 +10710,6 @@ function initAnnotation() {
     if (!tbDrag) return;
     toolbar.style.left = (tbDrag.left + e.clientX - tbDrag.startX) + 'px';
     toolbar.style.top = (tbDrag.top + e.clientY - tbDrag.startY) + 'px';
-    toolbar.style.transform = 'none'; // 取消居中 transform
   });
   toolbar.addEventListener('pointerup', () => { tbDrag = null; });
   toolbar.addEventListener('lostpointercapture', () => { tbDrag = null; });
