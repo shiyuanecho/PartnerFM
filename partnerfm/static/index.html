@@ -547,6 +547,14 @@ body {
   margin-bottom: var(--space-6);
 }
 
+.welcome-author {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  margin-top: auto;
+  padding-bottom: var(--space-4);
+}
+
 /* 快速入门步骤已移除 */
 
 /* 快捷键区 */
@@ -2557,7 +2565,7 @@ body {
             <div id="welcome-page">
               <div class="welcome-icon"><svg width="36" height="36"><use href="#icon-folder-open"/></svg></div>
               <h2>PartnerFM</h2>
-              <p class="welcome-subtitle">你的 Mac 文件管理 &amp; AI 助手</p>
+              <p class="welcome-subtitle">你的 AI 个人工作台</p>
 
 
               <div class="welcome-shortcuts">
@@ -2594,9 +2602,7 @@ body {
                 </div>
               </div>
 
-              <div class="welcome-tip">
-                <span class="app-icon app-icon--sm"><svg><use href="#icon-lightbulb"/></svg></span> 也可以从访达直接拖入文件夹
-              </div>
+              <p class="welcome-author">@拾元</p>
             </div>
             <!-- 标注层（画笔 + 文字） -->
             <canvas id="annotation-canvas"></canvas>
@@ -6571,10 +6577,23 @@ setTimeout(() => {
       switchModule(saved);
     }
   } catch(e) { console.warn('模块恢复失败:', e.message); }
-  // 后台预加载 CLI 和 MCP，这样切过去时能秒渲染
+  // 后台预加载所有模块数据，切过去时秒渲染
   fetch('/api/cli').then(r => r.json()).then(d => { cliCache = d.items || {}; }).catch(() => {});
   fetch('/api/mcp').then(r => r.json()).then(d => { mcpConfig = d; mcpLoaded = true; }).catch(() => {});
   fetch('/api/mcp-status').then(r => r.json()).then(d => { mcpStatusCache = d.status || {}; }).catch(() => {});
+  fetch('/api/agents').then(r => r.json()).then(d => { agentConfig = d; }).catch(() => {});
+  fetch('/api/project-agents').then(r => r.json()).then(d => { projectAgentConfig = d; }).catch(() => {});
+  fetch('/api/usage?days=7').then(r => r.json()).then(d => { usageData = d; }).catch(() => {});
+  fetch('/api/data-platforms').then(r => r.json()).then(d => { dataPlatformConfig = d; }).catch(() => {});
+  fetch('/api/embedding-config').then(r => r.json()).then(d => {
+    document.getElementById('emb-provider').value = d.provider || '';
+    document.getElementById('emb-key').value = d.api_key || '';
+    document.getElementById('emb-url').value = d.base_url || '';
+    document.getElementById('emb-model').value = d.model || '';
+    onEmbProviderChange();
+    if (d.dimensions) document.getElementById('emb-status').textContent = '✅ 已配置（维度 ' + d.dimensions + '）';
+    embConfigLoaded = true;
+  }).catch(() => {});
 }, 100);
 
 document.querySelectorAll('.module-btn').forEach(b => {
@@ -7156,7 +7175,10 @@ const EMB_PRESETS = {
   custom:    { url: '', model: '', note: '' }
 };
 
+let embConfigLoaded = false;
+
 async function loadEmbeddingConfig() {
+  if (embConfigLoaded) return;
   try {
     const resp = await fetch('/api/embedding-config');
     const cfg = await resp.json();
@@ -7168,6 +7190,7 @@ async function loadEmbeddingConfig() {
     if (cfg.dimensions) {
       document.getElementById('emb-status').textContent = '✅ 已配置（维度 ' + cfg.dimensions + '）';
     }
+    embConfigLoaded = true;
   } catch (_) {}
 }
 
@@ -7622,6 +7645,7 @@ initPresetSelect();
 let roleConfig = { roles: [], activeRole: '' };
 
 async function loadRoleList() {
+  if (roleConfig.roles.length > 0) { renderRoleList(); updateRoleSelect(); return; }
   try {
     const r = await fetch('/api/roles');
     roleConfig = await r.json();
@@ -7817,6 +7841,9 @@ let agentConfig = { agents: [], activeAgentId: '' };
 let projectAgentConfig = { mappings: [], activeProjectId: '' };
 
 async function loadAgentConfig() {
+  if (agentConfig.agents && agentConfig.agents.length > 0) {
+    renderAgentList(); renderProjectAgentTable(); bindAgentTabs(); return;
+  }
   try {
     const [ar, pr] = await Promise.all([
       fetch('/api/agents').then(r => r.json()),
@@ -8170,6 +8197,7 @@ function deleteProjectMapping(projectId) {
 let cliCache = null;
 
 async function loadCliList() {
+  if (cliCache) { renderCliList(); return; }
   try {
     const resp = await fetch('/api/cli');
     const data = await resp.json();
@@ -8343,6 +8371,7 @@ function bindUsagePeriodBtns() {
 
 // ---- 数据加载 ----
 async function loadUsage() {
+  if (usageData) { renderUsage(); return; }
   try {
     const r = await fetch('/api/usage?days=' + usageDays);
     usageData = await r.json();
@@ -8839,6 +8868,12 @@ let dataActiveChannel = 'douyin';
 let editingSourceId = null; // 当前正在编辑的数据源 id
 
 async function loadDataMonitor() {
+  if (dataPlatformConfig) {
+    renderSourceList(); renderDataChannelTabs();
+    const chs = dataPlatformConfig.channels || [];
+    if (chs.length) selectDataChannel(chs[0].id || chs[0]);
+    return;
+  }
   try {
     const resp = await fetch('/api/data-platforms');
     dataPlatformConfig = await resp.json();
@@ -9081,6 +9116,7 @@ let mcpToolsCache = {};  // { server_id: { tools: [...], error: ... } }
 let mcpLoaded = false;
 
 async function loadMcpList() {
+  if (mcpLoaded) { renderMcpList(); return; }
   try {
     const resp = await fetch('/api/mcp');
     mcpConfig = await resp.json();
@@ -9088,7 +9124,6 @@ async function loadMcpList() {
   } catch(e) {
     mcpConfig = { items: {}, enabled: [] };
   }
-  // Also fetch status
   try {
     const sresp = await fetch('/api/mcp-status');
     const sdata = await sresp.json();
