@@ -1,0 +1,3569 @@
+#!/usr/bin/env python3
+"""PartnerFM local server — serves static files, persists state, proxies LLM calls."""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import threading
+import time
+import glob
+import datetime
+import sqlite3
+import urllib.request
+import urllib.error
+import urllib.parse
+import html
+import ssl
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+try:
+    import numpy as np
+except ImportError:
+    np = None  # 语义检索降级：numpy 不可用时禁用
+
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    psutil = None
+    HAS_PSUTIL = False  # 进程资源监控降级：不可用时回退 ps 命令
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+
+
+def _get_data_dir():
+    """数据目录：pip 安装 → ~/.partnerfm/；源码运行 → 项目根目录。"""
+    env = os.environ.get('PARTNERFM_DATA_DIR')
+    if env:
+        return os.path.expanduser(env)
+    if 'site-packages' in __file__ or 'dist-packages' in __file__:
+        return os.path.join(os.path.expanduser('~'), '.partnerfm')
+    # 源码运行 — server.py 在 partnerfm/ 下，上溯一级到项目根
+    return os.path.dirname(BASE_DIR)
+
+
+DATA_DIR = _get_data_dir()
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+STATE_FILE = os.path.join(DATA_DIR, '.partnerfm-state.json')
+MODELS_FILE = os.path.join(DATA_DIR, '.partnerfm-models.json')
+ENGINES_FILE = os.path.join(DATA_DIR, '.partnerfm-engines.json')
+CLI_FILE = os.path.join(DATA_DIR, '.partnerfm-cli.json')
+MCP_FILE = os.path.join(DATA_DIR, '.partnerfm-mcp.json')
+CHAT_FILE = os.path.join(DATA_DIR, '.partnerfm-chats.json')
+PROMPTS_FILE = os.path.join(DATA_DIR, '.partnerfm-prompts.json')
+WORKSPACES_FILE = os.path.join(DATA_DIR, '.partnerfm-workspaces.json')
+SKILLS_FILE = os.path.join(DATA_DIR, '.partnerfm-skills.json')
+ROLES_FILE = os.path.join(DATA_DIR, '.partnerfm-roles.json')
+EMBEDDING_FILE = os.path.join(DATA_DIR, '.partnerfm-embedding.json')
+INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
+DATA_PLATFORMS_FILE = os.path.join(DATA_DIR, '.partnerfm-data-platforms.json')
+AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
+PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
+LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
+USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
+HOST = '127.0.0.1'
+PORT = 8765
+
+# 文本类文件后缀白名单（索引/search 共用）
+TEXT_EXTS = {'.md','.txt','.markdown','.html','.htm','.json','.js','.ts','.jsx','.tsx',
+             '.py','.rb','.go','.rs','.java','.c','.cpp','.h','.hpp','.css','.scss',
+             '.yaml','.yml','.xml','.csv','.tsv','.log','.ini','.toml','.sh','.bat',
+             '.sql','.vue','.svelte','.swift','.kt','.php','.r','.scala','.dart',
+             '.pdf','.docx','.doc'}
+
+# 图片类文件后缀（OCR 索引用）
+IMAGE_EXTS = {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tiff','.tif'}
+
+# 尝试导入 OCR 库
+try:
+    import pytesseract
+    from PIL import Image
+    _OCR_AVAILABLE = bool(shutil.which('tesseract'))
+except ImportError:
+    _OCR_AVAILABLE = False
+
+# 尝试导入 PDF/Word 解析库
+try:
+    import pdfplumber
+    _PDF_AVAILABLE = True
+except ImportError:
+    _PDF_AVAILABLE = False
+
+try:
+    import docx
+    _DOCX_AVAILABLE = True
+except ImportError:
+    _DOCX_AVAILABLE = False
+
+# Default CLI registry — what CLIs PartnerFM knows about
+DEFAULT_CLI = {
+    "cursor-agent": {
+        "name": "Cursor Agent",
+        "path": "/Applications/Cursor.app/Contents/Resources/app/bin/cursor agent",
+        "description": "Cursor 编辑器的 AI 编程代理，支持 print 模式和交互模式。安装 Cursor 编辑器后可用。",
+        "tutorial": "## 使用方式\n\n**Print 模式（推荐）：**\n```bash\ncursor agent -p \"你的任务\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\ncursor agent \"你的任务\"\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「用 Cursor Agent 帮我写一个 xxx」，主 Agent 会通过 run_shell 工具执行 cursor 命令。"
+    },
+    "hermes-agent": {
+        "name": "Hermes Agent",
+        "path": "hermes",
+        "description": "多平台 AI 代理，支持 20+ 大模型提供商，消息平台网关。",
+        "tutorial": "## 使用方式\n\n**单次查询：**\n```bash\nhermes chat -q \"你的问题\"\n```\n\n**交互模式：**\n```bash\nhermes\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「用 Hermes 帮我查 xxx」，主 Agent 会通过 run_shell 工具执行 hermes 命令。"
+    },
+    "claude-code": {
+        "name": "Claude Code",
+        "path": "claude",
+        "description": "Anthropic 官方 CLI AI 编程助手，完整的代码理解、重构、调试能力，支持多文件编辑。",
+        "tutorial": "## 使用方式\n\n**单次任务（print 模式）：**\n```bash\nclaude -p \"重构这个文件\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\nclaude\n```\n\n**安装：**\n```bash\nnpm install -g @anthropic-ai/claude-code\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「让 Claude Code 帮我 xxx」，主 Agent 会通过 run_shell 执行 claude 命令。"
+    },
+    "workbuddy": {
+        "name": "WorkBuddy",
+        "path": "node workbuddy-sidecar/server.js",
+        "description": "腾讯 AI Agent SDK 侧车，已桥接到 PartnerFM。启动侧车后，在模型选择器选「WorkBuddy Agent」使用。",
+        "tutorial": "## 架构\n\nWorkBuddy 是独立 Node.js 进程，通过 SSE 桥接到 PartnerFM。\n\n## 启动方式\n\n```bash\ncd /Users/shiyuanchang/PartnerFM/workbuddy-sidecar\nnpm install\nnode server.js\n```\n\n## 在 PartnerFM 中调用\n\n**方式一（直接）：** 聊天窗口模型选择器选「WorkBuddy Agent」，直接对话。\n**方式二（调度）：** 在聊天中说「让 WorkBuddy 帮我 xxx」。"
+    }
+}
+
+# Default MCP registry
+DEFAULT_MCP = {
+    "fetch": {
+        "name": "网页获取",
+        "icon": "🌐",
+        "description": "获取网页内容、搜索信息、提取数据",
+        "command": "npx -y @modelcontextprotocol/server-fetch",
+        "tutorial": "## 功能\n\n- 获取网页内容\n- 网页搜索\n\n**在 PartnerFM 中：** 在聊天窗口直接问，我会用 web_search 工具帮你查。"
+    },
+    "feishu": {
+        "name": "飞书",
+        "icon": "🐦",
+        "description": "飞书官方 OpenAPI MCP——发送消息、创建文档、管理日历、通讯录等，需配置应用凭证",
+        "command": "npx -y @larksuiteoapi/lark-mcp --app-id <your_app_id> --app-secret <your_app_secret>",
+        "tutorial": "## 连接飞书\n\n飞书官方 MCP 服务器（`@larksuiteoapi/lark-mcp`），连接后 AI 可真实操作飞书：发消息、建文档、读通讯录、管日历等。\n\n### 配置步骤\n1. 前往 [飞书开放平台](https://open.feishu.cn/) 创建一个**自建应用**\n2. 在「凭证与基础信息」中复制 **App ID**（形如 `cli_xxxxxxxx`）和 **App Secret**\n3. 在「权限管理」中按需开启权限范围（如发消息需 `im:message`、建文档需 `docx:document` 等）\n4. 编辑上方「启动命令」，把 `<your_app_id>` 和 `<your_app_secret>` 替换为真实凭证\n5. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` / `create_message` — 发送消息\n- `create_doc` / `create_document` — 创建云文档\n- `list_users` / `get_user` — 通讯录查询\n- `create_event` — 创建日历事件\n\n> App Secret 是敏感信息，仅保存在本地 `.partnerfm-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
+    },
+    "wecom": {
+        "name": "企业微信",
+        "icon": "💼",
+        "description": "企业微信官方 MCP——发送消息、管理通讯录、客户联系、会话存档等，需配置企业凭证",
+        "command": "npx -y @anthropic/mcp-server-wecom --corp-id <your_corp_id> --corp-secret <your_corp_secret>",
+        "tutorial": "## 连接企业微信\n\n企业微信 MCP 服务器，连接后 AI 可真实操作企业微信：发消息、查通讯录、管理客户等。\n\n### 配置步骤\n1. 前往 [企业微信管理后台](https://work.weixin.qq.com/) 登录管理员账号\n2. 在「我的企业」→「企业信息」底部复制 **企业 ID**（Corp ID，形如 `wwxxxxxxxxxxxxxxxx`）\n3. 在「应用管理」→「自建」中创建一个**自建应用**\n4. 在自建应用的详情页复制 **Secret**（Corp Secret）\n5. 在「企业微信授权配置」中设置可信域名和授权回调\n6. 编辑上方「启动命令」，把 `<your_corp_id>` 和 `<your_corp_secret>` 替换为真实凭证\n7. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` — 发送应用消息（文本/图文/卡片等）\n- `list_users` / `get_user` — 通讯录查询\n- `list_departments` — 部门管理\n- `create_group` — 创建群聊\n- `external_contact` — 客户联系管理\n\n> Corp Secret 是敏感信息，仅保存在本地 `.partnerfm-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
+    }
+}
+
+# ===== MCP Client (JSON-RPC over stdio) =====
+class McpClient:
+    """Manages a single MCP server process via stdio JSON-RPC."""
+
+    def __init__(self, server_id, command):
+        self.server_id = server_id
+        self.command = command
+        self.process = None
+        self.lock = threading.RLock()
+        self._initialized = False
+        self._tools = []
+        self._req_id = 0
+        self._pending = {}  # req_id -> (event, result_container)
+        self._reader_thread = None
+        self._stop_reader = False
+
+    def _next_id(self):
+        self._req_id += 1
+        return self._req_id
+
+    def start(self):
+        """Start the MCP server subprocess."""
+        with self.lock:
+            if self.process and self.process.poll() is None:
+                return True  # Already running
+            try:
+                # Parse command: split by spaces, but respect quotes
+                import shlex
+                cmd_parts = shlex.split(self.command)
+                self.process = subprocess.Popen(
+                    cmd_parts,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=False,
+                    bufsize=0,
+                )
+                self._stop_reader = False
+                self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+                self._reader_thread.start()
+                # Wait a few seconds for process to start (npx may need download time)
+                time.sleep(3)
+                if self.process.poll() is not None:
+                    return f'进程启动失败（退出码：{self.process.returncode}）'
+                return True
+            except Exception as e:
+                return f'启动失败：{e}'
+
+    def _read_loop(self):
+        """Background thread: read JSON-RPC responses from stdout."""
+        while not self._stop_reader and self.process and self.process.stdout:
+            try:
+                line = self.process.stdout.readline()
+                if not line:
+                    break
+                line = line.decode('utf-8', errors='replace').strip()
+                if not line:
+                    continue
+                msg = json.loads(line)
+                msg_id = msg.get('id')
+                if msg_id is not None and msg_id in self._pending:
+                    evt, container = self._pending[msg_id]
+                    container['result'] = msg
+                    evt.set()
+            except (json.JSONDecodeError, Exception):
+                continue
+
+    def _send_request(self, method, params, timeout=30):
+        """Send a JSON-RPC request and wait for response."""
+        with self.lock:
+            if not self.process or self.process.poll() is not None:
+                err = self.start()
+                if err is not True:
+                    return {'error': err}
+
+            req_id = self._next_id()
+            req = {
+                'jsonrpc': '2.0',
+                'id': req_id,
+                'method': method,
+                'params': params
+            }
+            evt = threading.Event()
+            container = {}
+            self._pending[req_id] = (evt, container)
+
+            try:
+                data = json.dumps(req) + '\n'
+                self.process.stdin.write(data.encode('utf-8'))
+                self.process.stdin.flush()
+            except Exception as e:
+                del self._pending[req_id]
+                return {'error': f'发送请求失败：{e}'}
+
+        # Wait for response outside lock
+        if not evt.wait(timeout=timeout):
+            with self.lock:
+                self._pending.pop(req_id, None)
+            return {'error': f'请求超时（{timeout}秒）'}
+
+        with self.lock:
+            self._pending.pop(req_id, None)
+
+        result = container.get('result', {})
+        if 'error' in result:
+            return {'error': result['error']}
+        return result.get('result', {})
+
+    def initialize(self):
+        """Perform MCP initialize handshake."""
+        if self._initialized:
+            return True
+        result = self._send_request('initialize', {
+            'protocolVersion': '2024-11-05',
+            'capabilities': {},
+            'clientInfo': {'name': 'PartnerFM', 'version': '1.0.0'}
+        }, timeout=60)
+        if 'error' in result:
+            return result['error']
+        # Send initialized notification
+        try:
+            notify = json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'}) + '\n'
+            self.process.stdin.write(notify.encode('utf-8'))
+            self.process.stdin.flush()
+        except Exception:
+            pass
+        self._initialized = True
+        return True
+
+    def list_tools(self):
+        """Discover tools from this MCP server."""
+        init_result = self.initialize()
+        if init_result is not True:
+            return {'error': init_result}
+        result = self._send_request('tools/list', {}, timeout=15)
+        if 'error' in result:
+            return result
+        tools = result.get('tools', [])
+        self._tools = tools
+        return {'tools': tools}
+
+    def call_tool(self, name, arguments):
+        """Call a tool on this MCP server."""
+        init_result = self.initialize()
+        if init_result is not True:
+            return f'MCP 初始化失败：{init_result}'
+        result = self._send_request('tools/call', {
+            'name': name,
+            'arguments': arguments
+        }, timeout=60)
+        if 'error' in result:
+            err = result['error']
+            if isinstance(err, dict):
+                return f'MCP 工具调用错误：{err.get("message", err)}'
+            return f'MCP 工具调用错误：{err}'
+        # Extract content from result
+        content = result.get('content', [])
+        texts = []
+        for item in content:
+            if isinstance(item, dict) and item.get('type') == 'text':
+                texts.append(item.get('text', ''))
+        if texts:
+            return '\n'.join(texts)
+        return json.dumps(result, ensure_ascii=False)
+
+    def get_status(self):
+        """Return current status."""
+        running = self.process is not None and self.process.poll() is None
+        return {
+            'running': running,
+            'initialized': self._initialized,
+            'tool_count': len(self._tools)
+        }
+
+    def stop(self):
+        """Stop the subprocess."""
+        self._stop_reader = True
+        self._initialized = False
+        self._tools = []
+        if self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=2)
+            except Exception:
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
+            self.process = None
+
+
+# Global MCP client registry: {server_id: McpClient}
+_mcp_clients = {}
+_mcp_clients_lock = threading.Lock()
+
+
+def _get_mcp_client(server_id, command):
+    """Get or create an McpClient for the given server."""
+    with _mcp_clients_lock:
+        client = _mcp_clients.get(server_id)
+        if client and client.process and client.process.poll() is None:
+            return client
+        client = McpClient(server_id, command)
+        _mcp_clients[server_id] = client
+        return client
+
+
+def _discover_mcp_tools(enabled_servers):
+    """Discover tools from all enabled MCP servers.
+    Returns {server_id: {'tools': [...], 'error': ...}}"""
+    results = {}
+    for sid, cfg in enabled_servers.items():
+        cmd = cfg.get('command', '')
+        if not cmd:
+            results[sid] = {'error': '没有配置启动命令'}
+            continue
+        client = _get_mcp_client(sid, cmd)
+        result = client.list_tools()
+        results[sid] = result
+    return results
+
+
+def _call_mcp_tool(server_id, tool_name, arguments):
+    """Call a tool on a specific MCP server."""
+    with _mcp_clients_lock:
+        client = _mcp_clients.get(server_id)
+    if not client:
+        return f'MCP server "{server_id}" 未连接'
+    return client.call_tool(tool_name, arguments)
+
+
+# Default chat history
+DEFAULT_CHATS = {
+    "chats": []
+}
+
+# Default system prompts
+DEFAULT_PROMPTS = {
+    "prompts": [
+        {"id": "none",      "name": "无模板",     "prompt": ""},
+        {"id": "code",      "name": "帮我写代码", "prompt": "你是一个资深的软件工程师。请根据用户提供的上下文和需求，写出高质量、可运行的代码。使用中文回复，代码部分保持英文。"},
+        {"id": "translate", "name": "翻译文档",   "prompt": "你是一个专业的技术文档翻译。请将用户提供的内容翻译成中文，保留代码块和技术术语的原文，确保翻译准确流畅。"},
+        {"id": "summary",   "name": "总结内容",   "prompt": "你是一个高效的文档分析助手。请用简洁的中文总结用户提供的内容要点，使用分条列举的方式，突出关键信息。"},
+        {"id": "explain",   "name": "解释概念",   "prompt": "你是一个耐心的技术导师。请用通俗易懂的中文解释用户提出的概念或代码，从基础到深入，逐步展开。"},
+        {"id": "review",    "name": "代码审查",   "prompt": "你是一个严格的代码审查员。请审查用户提供的代码，指出潜在问题、性能瓶颈、安全隐患，并给出改进建议。使用中文回复。"},
+        {"id": "write",     "name": "写作助手",   "prompt": "你是一个优秀的中文写作助手。请帮助用户润色、改写或创作内容，保持原意，提升表达质量。"},
+        {"id": "custom",    "name": "自定义提示", "prompt": ""}
+    ]
+}
+
+DEFAULT_WORKSPACES = {"workspaces": {}}
+
+# Default Skills registry — pluggable agent capabilities
+DEFAULT_SKILLS = {
+    "skills": [
+        # ===== 外部应用集成 =====
+        {"id":"workbuddy","name":"WorkBuddy","icon":"🤖","category":"外部应用",
+         "description":"WorkBuddy AI 工作台集成，掌握文件操作、MCP 连接器、自动化调度、多模型配置等能力",
+         "prompt":"你是 WorkBuddy 专家。WorkBuddy 是一个 AI 智能体工作台，支持：\n- 文件系统操作（读/写/搜索/列表）\n- MCP 连接器（飞书、GitHub、腾讯文档等 30+ 连接器）\n- 自动化调度（Cron 定时任务）\n- 多模型支持（DeepSeek、OpenAI、Claude 等）\n- 专家系统（100+ 领域专家）\n- 技能市场（Skills Marketplace）\n- 记忆系统（Cloud Memory / User Memory / Workspace Memory）\n回答问题时请基于 WorkBuddy 的知识体系，给出最佳实践。",
+         "enabled":False},
+        {"id":"coze","name":"Coze 扣子","icon":"🧩","category":"外部应用",
+         "description":"字节跳动 Coze AI Bot 开发平台，Bot 创建、插件开发、工作流设计、知识库配置",
+         "prompt":"你是 Coze（扣子）平台专家。Coze 是字节跳动的 AI Bot 开发平台，核心概念：\n- Bot：可发布的 AI 对话机器人\n- Plugin：扩展 Bot 能力的插件\n- Workflow：可视化工作流编排\n- Knowledge：RAG 知识库\n- Variable：对话变量和记忆\n- 发布渠道：飞书、微信、Web 等\nAPI 风格：RESTful，使用 Personal Access Token 认证。回答时给出具体的 Bot 配置方案和最佳实践。",
+         "enabled":False},
+        {"id":"feishu","name":"飞书","icon":"🐦","category":"外部应用",
+         "description":"飞书开放平台集成，文档/表格/消息/审批/日历 API 调用",
+         "prompt":"你是飞书开放平台专家。飞书 API 核心领域：\n- 消息与群组：发送消息、机器人 Webhook\n- 云文档：文档、表格、多维表格 API\n- 通讯录：用户、部门管理\n- 审批：审批实例创建与查询\n- 日历：日程管理\n- 身份验证：OAuth 2.0 / 企业自建应用\nAPI Base URL: https://open.feishu.cn/open-apis\n认证方式：tenant_access_token 或 user_access_token\n所有回复使用 application/json，错误码参考官方文档。请给出可直接使用的 API 调用示例。",
+         "enabled":False},
+        {"id":"wecom","name":"企业微信","icon":"💼","category":"外部应用",
+         "description":"企业微信开发集成，消息推送、应用管理、客户联系、会话存档 API",
+         "prompt":"你是企业微信开发专家。核心 API 模块：\n- 消息推送：应用消息、群机器人 Webhook\n- 通讯录：部门/成员/标签管理\n- 客户联系：外部联系人、客户群\n- 会话存档：消息记录保存\n- 身份验证：OAuth 2.0 授权\nAPI Base: https://qyapi.weixin.qq.com/cgi-bin\nToken 获取：corpid + corpsecret\n请给出安全、合规的企业微信集成方案。",
+         "enabled":False},
+        {"id":"github","name":"GitHub","icon":"🐙","category":"外部应用",
+         "description":"GitHub REST/GraphQL API、Git 工作流、Actions CI/CD、Projects 看板",
+         "prompt":"你是 GitHub 专家。掌握：\n- REST API v3 和 GraphQL API v4\n- Git 工作流（feature branch、GitHub Flow、 trunk-based）\n- Actions CI/CD（YAML 配置、secrets 管理）\n- Projects 看板和 Issues 管理\n- Code Review 最佳实践\n- GitHub CLI (gh) 命令\n请给出具体的 API 示例和工作流建议。",
+         "enabled":False},
+        {"id":"notion","name":"Notion","icon":"📝","category":"外部应用",
+         "description":"Notion API 集成，数据库/页面/块操作，知识库管理",
+         "prompt":"你是 Notion API 专家。核心概念：\n- Block：页面基本组成单位\n- Database：结构化数据表\n- Page：文档页面\n- Property：数据库字段（title/rich_text/number/select/date 等）\nAPI Base: https://api.notion.com/v1\n认证：Bearer Token (Internal Integration)\nNotion-Version Header: 2022-06-28\n请给出 Block 操作的完整示例。",
+         "enabled":False},
+        {"id":"figma","name":"Figma","icon":"🎨","category":"外部应用",
+         "description":"Figma API / Figma Plugin 开发，设计稿解析、组件提取、变量管理",
+         "prompt":"你是 Figma 开发专家。掌握：\n- Figma REST API：文件、评论、团队、项目\n- Figma Plugin API：面板 UI、节点操作\n- Design Tokens / Variables API\n- 组件和样式提取\n- 设计稿导出（PNG/SVG/PDF）\n认证：Personal Access Token\nAPI Base: https://api.figma.com/v1\n请给出可执行的 API 调用代码。",
+         "enabled":False},
+
+        # ===== 创作能力 =====
+        {"id":"drawing","name":"作图能力","icon":"🎯","category":"创作能力",
+         "description":"SVG 图表/架构图/流程图/数据可视化/UI 原型生成",
+         "prompt":"你是专业的数据可视化和图形设计专家。你有以下能力：\n1. SVG 图表：柱状图、折线图、饼图、雷达图、散点图\n2. 架构图：系统架构图、微服务拓扑图、网络架构图\n3. 流程图：业务流程、状态机、决策树\n4. UI 原型：网页/APP 线框图、交互原型\n5. 数据信息图：时间线、比较图、仪表盘\n设计原则：\n- 使用 Apple 设计语言（SF 风格、圆角、阴影、毛玻璃）\n- 中国股票市场红涨绿跌配色\n- 中文标注，清晰易读\n- 输出纯 SVG 代码（可嵌入 HTML），viewBox=\"0 0 680 H\"\n- SVG 中可使用 color-scheme: light dark 适配主题\n每当你需要展示可视化内容时，直接生成 SVG 代码。",
+         "enabled":False},
+        {"id":"coding","name":"写代码","icon":"💻","category":"创作能力",
+         "description":"全栈开发（React/Vue/Node.js/Python），算法实现，架构设计",
+         "prompt":"你是资深全栈软件工程师。技术栈：\n- 前端：React 18+ / Vue 3 / TypeScript / Tailwind CSS / Next.js\n- 后端：Node.js (Express/Fastify) / Python (FastAPI/Flask) / Go\n- 数据库：PostgreSQL / MySQL / MongoDB / Redis\n- 云服务：CloudBase / Vercel / AWS\n编码规范：\n- 使用 TypeScript 类型注解\n- 错误处理完善（try-catch + 用户友好提示）\n- 代码可读性优先，注释只写必要的\n- 给出完整可运行的代码，包括 import 和 package.json\n- 前端代码零框架依赖时也保证结构清晰\n- 中文回复解释逻辑，代码保持英文",
+         "enabled":False},
+        {"id":"writing","name":"写文章","icon":"✍️","category":"创作能力",
+         "description":"长篇内容创作（技术博客/产品文档/商业文案/学术论文）",
+         "prompt":"你是专业的中文写作者和内容创作者。擅长：\n- 技术博客：深入浅出，代码示例丰富\n- 产品文档：结构清晰，用户导向\n- 商业文案：营销页、产品介绍、白皮书\n- 学术论文：严谨逻辑，规范引用\n写作风格：\n- 开门见山，金字塔结构\n- 数据支撑观点\n- 段落简短，善用小标题\n- 使用适当的图表和列表\n- 结尾给出行动建议或下一步\n根据用户需求调整语气（正式/轻松/技术/通俗）。",
+         "enabled":False},
+        {"id":"translation","name":"翻译能力","icon":"🌍","category":"创作能力",
+         "description":"中英日韩多语言翻译，技术文档/法律合同/文学作品的精准翻译",
+         "prompt":"你是专业的多语言翻译专家。支持：中 ↔ 英 ↔ 日 ↔ 韩。\n翻译原则：\n- 技术文档：保留代码/API/变量名原文，术语统一\n- 法律合同：严谨准确，不增不减不改变原意\n- 文学作品：传达风格和意境，适度归化\n- UI 文案：简洁有力，符合平台规范\n输出格式：\n1. 先给出翻译结果\n2. 必要时加注释说明术语选择和翻译考量\n3. 发现原文歧义时主动提醒",
+         "enabled":False},
+
+        # ===== 分析能力 =====
+        {"id":"code-review","name":"代码审查","icon":"🔍","category":"分析能力",
+         "description":"全面代码审查：安全漏洞、性能瓶颈、代码异味、架构评估、最佳实践建议",
+         "prompt":"你是严格的代码审查员（Senior Code Reviewer）。审查维度：\n\n**安全**\n- SQL注入/XSS/CSRF/路径穿越\n- 密钥硬编码/敏感信息泄露\n- 输入验证和权限校验\n\n**性能**\n- N+1查询/不必要重渲染\n- 内存泄漏/资源未释放\n- 算法复杂度优化空间\n\n**质量**\n- 命名规范/代码重复\n- 错误处理完整性\n- 类型安全/边界检查\n\n**架构**\n- 单一职责/开闭原则\n- 模块耦合度\n- 可测试性和可维护性\n\n输出格式：分严重程度（🔴严重 🟡警告 🔵建议）列出问题，每个问题给出具体位置、解释和改进代码。",
+         "enabled":False},
+        {"id":"data-analysis","name":"数据分析","icon":"📊","category":"分析能力",
+         "description":"数据洞察、统计分析、趋势预测、报表生成、SQL 查询优化",
+         "prompt":"你是资深数据分析师。技能：\n- SQL：复杂查询、窗口函数、性能优化\n- Python：pandas/numpy/matplotlib 数据分析\n- 统计：描述性统计/假设检验/回归分析\n- 可视化：选择合适的图表类型\n- 商业分析：漏斗分析/用户分群/留存分析/归因分析\n分析流程：\n1. 理解数据结构和业务背景\n2. 清洗和预处理\n3. 探索性分析（EDA）\n4. 深度分析并提出洞察\n5. 给出可执行的建议\n回复时用数据说话，给出具体的数字和百分比。",
+         "enabled":False},
+        {"id":"doc-summary","name":"文档总结","icon":"📋","category":"分析能力",
+         "description":"长文档快速摘要、关键信息提取、会议纪要、多文档对比分析",
+         "prompt":"你是高效的文档分析专家。擅长：\n- 长文档快速提取核心观点\n- 结构化摘要（背景→要点→结论→行动项）\n- 会议纪要转写与要点提炼\n- 多文档交叉对比分析\n- 技术文档的术语解释和概念梳理\n\n输出格式：\n```\n## TL;DR\n一句话总结\n\n## 核心要点\n1. ...\n2. ...\n\n## 关键数据\n- ...\n\n## 待办事项\n- [ ] ...\n```\n优先使用中文，专有名词保留原文。",
+         "enabled":False},
+        {"id":"debugging","name":"排错调试","icon":"🐛","category":"分析能力",
+         "description":"Bug 定位与修复、日志分析、性能诊断、异常堆栈解读",
+         "prompt":"你是资深的 Bug 调试专家（Debugger）。调试方法：\n1. 复现：理解触发条件和环境\n2. 隔离：二分法缩小范围\n3. 分析：日志/堆栈/变量状态\n4. 修复：最小改动，考虑边界情况\n5. 验证：回归测试，防止复发\n\n工具技巧：\n- Chrome DevTools：断点、Network、Performance\n- Node.js：--inspect、console.trace\n- Python：pdb、traceback、logging\n- 通用：二分注释法、git bisect\n\n回复时先给出根因分析，再给出修复代码和一个验证步骤。",
+         "enabled":False},
+
+        # ===== 效率工具 =====
+        {"id":"meeting-notes","name":"会议纪要","icon":"🎙️","category":"效率工具",
+         "description":"会议录音转写后的摘要整理，行动项提取，决策记录",
+         "prompt":"你是专业的会议纪要整理助手。格式：\n\n## 会议信息\n- 主题/日期/参会人\n\n## 讨论要点\n1. ...\n2. ...\n\n## 决策\n- ✅ 已决定：...\n- ⏳ 待讨论：...\n\n## 行动项\n| 负责人 | 任务 | 截止日 |\n|--------|------|--------|\n| ... | ... | ... |\n\n## 下次会议\n- 时间/议题\n\n使用中文，简洁有力。",
+         "enabled":False},
+        {"id":"prompt-engineering","name":"提示词工程","icon":"🎛️","category":"效率工具",
+         "description":"Prompt 设计与优化、Few-shot 示例、Chain-of-Thought、结构化输出",
+         "prompt":"你是 Prompt Engineering 专家。掌握技术：\n- Zero-shot / Few-shot / Chain-of-Thought\n- Role Prompting / Instruction Prompting\n- 结构化输出（JSON/Markdown 模板）\n- 负面提示（Negative Prompting）\n- 思维链分解复杂任务\n\n设计原则：\n- 明确角色和任务边界\n- 给出输出格式示例\n- 分步骤引导思考\n- 使用分隔符标记不同部分\n\n根据用户需求设计、优化并测试 prompt。",
+         "enabled":False}
+    ]
+}
+
+DEFAULT_ROLES = {
+    "roles": [
+        {"id":"none","name":"通用助手","icon":"🔄","category":"通用",
+         "description":"不限定角色，AI 根据对话内容灵活响应",
+         "prompt":""},
+
+        # ===== 内容创作 =====
+        {"id":"copywriter","name":"文案写手","icon":"✍️","category":"内容创作",
+         "description":"小红书/公众号/视频脚本、营销文案、品牌故事",
+         "prompt":"你是专业的中文创作者。擅长小红书图文、公众号长文、短视频脚本、营销文案。\n写作原则：\n- 标题有钩子，前三行决定用户是否读下去\n- 金字塔结构，段落简短\n- 数据+案例支撑观点\n- 结尾给出行动建议或情绪共鸣\n- 根据平台调整语气（小红书活泼、公众号深度、视频口语化）"},
+
+        {"id":"tutor","name":"教程讲师","icon":"📖","category":"内容创作",
+         "description":"把复杂概念拆成教学大纲、逐字稿、PPT 结构",
+         "prompt":"你是专业的教育内容设计师。擅长：\n- 复杂概念的拆解和通俗化\n- 教学大纲设计（目标→知识点→练习→检验）\n- 视频逐字稿（口语化、有节奏感）\n- PPT 结构（一页一个核心观点）\n- 互动问题设计（激发思考）\n\n设计原则：\n- 先给「学完你能做什么」\n- 用类比降低认知门槛\n- 每次只讲一个核心概念\n- 穿插练习巩固记忆\n- 中文授课，专业术语保留英文"},
+
+        {"id":"translate","name":"翻译润色","icon":"🌍","category":"内容创作",
+         "description":"中英日韩互译，技术文档、商业文书、文学内容",
+         "prompt":"你是专业翻译。技术文档保留代码和术语原文；商业文书准确流畅；文学内容传达风格。先给译文，必要时加注释说明术语选择。发现原文歧义主动提醒。"},
+
+        # ===== 知识整理 =====
+        {"id":"knowledge-editor","name":"知识库编辑","icon":"📚","category":"知识整理",
+         "description":"把零散信息整理成结构化文档，加标签、做摘要、建链接",
+         "prompt":"你是知识管理专家。擅长：\n- 把零散笔记整理成结构化文档\n- 自动提取关键词和标签\n- 建立文档间的交叉引用\n- 写摘要和 TL;DR\n- 识别知识缺口\n\n整理原则：\n- 一个文档只讲一个主题\n- 金字塔结构（结论先行）\n- 善用表格和列表\n- 标注信息来源和可信度\n- 结尾给出「延伸阅读」建议"},
+
+        {"id":"reader","name":"阅读助理","icon":"👁️","category":"知识整理",
+         "description":"读长文/PDF 后做要点提炼、批判性提问、知识关联",
+         "prompt":"你是深度阅读助理。拿到一篇文章后：\n1. 一句话概括核心观点\n2. 提取 3-5 个关键论点\n3. 标注文中的数据和引用\n4. 提出 2-3 个批判性问题\n5. 关联已有知识（如果用户提供了上下文）\n\n输出格式：\n## 一句话总结\n## 核心论点\n## 关键数据\n## 值得追问的问题\n## 延伸思考\n\n中文输出，保持客观。"},
+
+        {"id":"data-analysis","name":"数据解读","icon":"📊","category":"知识整理",
+         "description":"数据洞察、趋势分析、报表解读、可视化建议",
+         "prompt":"你是数据分析师。技能：SQL/Python 数据分析、统计方法、可视化设计、商业分析（漏斗/留存/归因）。\n分析流程：理解数据结构→清洗→探索性分析→深度洞察→可执行建议。\n用数据说话，给出具体数字和百分比。"},
+
+        # ===== 自媒体运营 =====
+        {"id":"topic-planner","name":"选题策划","icon":"🎯","category":"自媒体运营",
+         "description":"根据知识库内容出选题方案，匹配热点，规划内容日历",
+         "prompt":"你是自媒体选题策划师。根据用户提供的领域和素材：\n1. 出 5-10 个选题（含标题和角度）\n2. 标注每个选题的流量潜力（🔴爆款 🟡常规 🔵长尾）\n3. 匹配当前热点话题\n4. 规划发布节奏（内容日历）\n5. 给出每个选题的差异化角度\n\n选题原则：\n- 痛点 + 解决方案 = 高打开率\n- 反常识观点 = 高互动率\n- 实用教程 = 高收藏率\n- 情绪共鸣 = 高转播率"},
+
+        {"id":"viral-optimizer","name":"爆款优化","icon":"🔥","category":"自媒体运营",
+         "description":"改标题、改钩子、改结尾，提升完读率和互动率",
+         "prompt":"你是内容优化师，专攻小红书和公众号爆款。优化维度：\n\n**标题**\n- 数字+痛点+承诺（例：3 个方法，让你的文案转化率翻倍）\n- 反常识+好奇心（例：为什么你越努力，流量越差）\n- 人群标签+场景（例：30 岁转行 AI，我的真实经历）\n\n**开头（钩子）**\n- 前三行决定读者是否继续\n- 痛点共鸣 / 反常识观点 / 悬念提问\n\n**正文**\n- 段落不超过 3 行\n- 每段一个核心信息\n- 用 emoji 和短句增加节奏感\n\n**结尾**\n- 总结核心观点\n- 引导互动（提问/投票/评论区话题）\n\n优化时指出具体问题并给出改写版本。"},
+
+        {"id":"custom","name":"自定义","icon":"⚙️","category":"通用",
+         "description":"用户自定义系统提示词",
+         "prompt":""}
+    ],
+    "activeRole": ""
+}
+
+# ===== Agent 注册表 + Project-Agent 映射 =====
+
+DEFAULT_AGENTS = {
+    "agents": [
+        {
+            "id": "default-general",
+            "name": "全能助手",
+            "description": "不限定角色，根据对话灵活调用所有能力",
+            "systemPrompt": "你是一个全能 AI 助手。根据用户的需求灵活切换角色——需要写代码时你是软件工程师，需要写文案时你是专业写作者，需要分析数据时你是数据分析师。遇到复杂任务时，你可以调用其他专业智能体来协助。请用中文回复。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.7,
+            "tools": ["list_dir", "read_file", "write_file", "search_files", "semantic_search", "web_search", "web_fetch", "file_stats", "recent_files", "run_shell"],
+            "allowedOutputDir": "产出/通用",
+            "allowedFileTypes": [".md", ".html", ".txt", ".json", ".csv", ".svg", ".png", ".jpg"],
+            "maxIterations": 10,
+            "status": "active"
+        },
+        {
+            "id": "code-assistant",
+            "name": "代码助手",
+            "description": "全栈开发、算法实现、代码审查、架构设计",
+            "systemPrompt": "你是资深全栈软件工程师。精通 Python/JavaScript/HTML/CSS/SQL，熟悉 React/Vue/Node.js/Cloudflare Workers。写代码时注重可读性和错误处理，复杂逻辑加必要注释。用中文回复，代码块标注语言类型。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.3,
+            "tools": ["list_dir", "read_file", "write_file", "search_files", "web_search", "web_fetch", "semantic_search", "run_shell"],
+            "allowedOutputDir": "产出/代码",
+            "allowedFileTypes": [".md", ".html", ".js", ".py", ".ts", ".json", ".css"],
+            "maxIterations": 15,
+            "status": "active"
+        },
+        {
+            "id": "writing-assistant",
+            "name": "文案助手",
+            "description": "技术博客、产品文档、商业文案、翻译润色",
+            "systemPrompt": "你是专业的中文写作者，擅长技术博客、产品文档、商业文案和翻译润色。文风清晰准确，结构分明。技术文章注重代码示例和实际应用场景，商业文案注重说服力和转化逻辑。用中文回复。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.7,
+            "tools": ["read_file", "write_file", "search_files", "web_search"],
+            "allowedOutputDir": "产出/文案",
+            "allowedFileTypes": [".md", ".html", ".txt"],
+            "maxIterations": 10,
+            "status": "active"
+        },
+        {
+            "id": "drawing-assistant",
+            "name": "图表助手",
+            "description": "SVG 图表、架构图、流程图、数据可视化",
+            "systemPrompt": "你是专业的数据可视化专家，擅长用 SVG 生成精美的图表、架构图、流程图。生成的 SVG 必须完整可渲染，包含 viewBox，颜色搭配专业。支持柱状图、折线图、饼图、流程图、架构图等。用中文回复，SVG 代码放在代码块中。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.5,
+            "tools": ["write_file", "read_file"],
+            "allowedOutputDir": "产出/图表",
+            "allowedFileTypes": [".svg", ".html", ".md"],
+            "maxIterations": 8,
+            "status": "active"
+        },
+        {
+            "id": "data-analyst",
+            "name": "数据分析师",
+            "description": "数据洞察、统计分析、趋势预测、SQL 查询",
+            "systemPrompt": "你是资深数据分析师，擅长从数据中发现规律和洞察。精通统计分析、趋势预测、SQL 查询。处理 CSV/JSON 数据，生成清晰的报告和可视化建议。先理解业务问题再分析，用数据说话。用中文回复。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.2,
+            "tools": ["list_dir", "read_file", "write_file", "search_files", "semantic_search", "web_search"],
+            "allowedOutputDir": "产出/数据",
+            "allowedFileTypes": [".md", ".csv", ".json", ".html"],
+            "maxIterations": 12,
+            "status": "active"
+        }
+    ],
+    "activeAgentId": "default-general"
+}
+
+DEFAULT_PROJECT_AGENTS = {
+    "mappings": [],
+    "activeProjectId": ""
+}
+
+
+def _load_json(path, default):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        _save_json(path, default)
+        return default
+
+
+def _save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ===== 操作日志 =====
+
+MAX_LOG_ENTRIES = 500
+
+def _append_log(entry):
+    """追加一条日志到 LOG_FILE，超出上限时清理旧条目"""
+    entry['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
+    entry['id'] = f'log_{int(time.time()*1000)}_{len(str(time.time())) % 10000:04d}'
+    logs = _load_json(LOG_FILE, {'logs': []})
+    logs['logs'].append(entry)
+    if len(logs['logs']) > MAX_LOG_ENTRIES:
+        logs['logs'] = logs['logs'][-MAX_LOG_ENTRIES:]
+    _save_json(LOG_FILE, logs)
+    return entry['id']
+
+def _get_logs(limit=100, agent_id=None, status=None, before=None):
+    """读取日志，支持过滤"""
+    data = _load_json(LOG_FILE, {'logs': []})
+    logs = data.get('logs', [])
+    if agent_id:
+        logs = [l for l in logs if l.get('agentId') == agent_id or l.get('callerId') == agent_id]
+    if status:
+        logs = [l for l in logs if l.get('status') == status]
+    if before:
+        logs = [l for l in logs if l.get('timestamp', '') < before]
+    return logs[-limit:]
+
+# ===== 用量追踪 =====
+
+MODEL_PRICING = {
+    'deepseek-v4-flash':  {'input': 0.14, 'output': 0.28},
+    'deepseek-v4-pro':    {'input': 0.44, 'output': 0.87},
+    'deepseek-chat':      {'input': 0.14, 'output': 0.28},
+    'deepseek-reasoner':  {'input': 0.55, 'output': 2.19},
+    'gpt-4o':             {'input': 2.50, 'output': 10.00},
+    'gpt-4o-mini':        {'input': 0.15, 'output': 0.60},
+    'gpt-4.1':            {'input': 2.00, 'output': 8.00},
+    'claude-sonnet-4-20250514': {'input': 3.00, 'output': 15.00},
+    'claude-haiku-4-5-20251001': {'input': 1.00, 'output': 5.00},
+    'claude-opus-4-20250514': {'input': 15.00, 'output': 75.00},
+}
+
+def _record_usage(model_id, agent_id, agent_name, prompt_tokens, completion_tokens):
+    """记录一次 LLM 调用的 token 用量和费用"""
+    today = time.strftime('%Y-%m-%d')
+    pricing = MODEL_PRICING.get(model_id, {'input': 0, 'output': 0})
+    input_cost = (prompt_tokens / 1_000_000) * pricing['input']
+    output_cost = (completion_tokens / 1_000_000) * pricing['output']
+    total_cost = round(input_cost + output_cost, 6)
+
+    entry = {
+        'date': today,
+        'modelId': model_id,
+        'agentId': agent_id,
+        'agentName': agent_name,
+        'promptTokens': prompt_tokens,
+        'completionTokens': completion_tokens,
+        'totalTokens': prompt_tokens + completion_tokens,
+        'cost': total_cost
+    }
+    data = _load_json(USAGE_FILE, {'usage': []})
+    data['usage'].append(entry)
+    # 只保留最近 90 天
+    cutoff = '2025-01-01' if len(data['usage']) < 5000 else data['usage'][-4000]['date']
+    data['usage'] = [e for e in data['usage'] if e['date'] >= cutoff]
+    _save_json(USAGE_FILE, data)
+
+def _get_usage(days=None, start_date=None, end_date=None):
+    """读取用量数据，支持按天/周/月聚合"""
+    data = _load_json(USAGE_FILE, {'usage': []})
+    entries = data.get('usage', [])
+    if start_date:
+        entries = [e for e in entries if e['date'] >= start_date]
+    if end_date:
+        entries = [e for e in entries if e['date'] <= end_date]
+    if days:
+        cutoff = (datetime.date.today() - datetime.timedelta(days=days)).isoformat() if hasattr(datetime, 'date') else ''
+        if cutoff:
+            entries = [e for e in entries if e['date'] >= cutoff]
+    return entries
+
+# ===== 本机 AI 工具监控 =====
+
+# AI 工具注册表：换电脑也通用。type=app 走 /Applications 检测，type=cli 走 which。
+# proc_match 用于进程匹配（pgrep），cli 用于检测命令行工具是否安装。
+AI_TOOLS = [
+    {'id': 'cursor', 'name': 'Cursor', 'type': 'app', 'bundle': 'Cursor.app',
+     'emoji': '🔵', 'proc_match': 'Cursor.app', 'cli': 'cursor'},
+    {'id': 'claude-code', 'name': 'Claude Code', 'type': 'cli', 'cli': 'claude',
+     'emoji': '🤖', 'proc_match': r'node.*claude'},
+    {'id': 'chatgpt', 'name': 'ChatGPT', 'type': 'app', 'bundle': 'ChatGPT Atlas.app',
+     'emoji': '🟢', 'proc_match': 'ChatGPT Atlas.app'},
+    {'id': 'gemini', 'name': 'Gemini', 'type': 'app', 'bundle': 'Gemini.app',
+     'emoji': '✦', 'proc_match': 'Gemini.app'},
+    {'id': 'codex', 'name': 'Codex CLI', 'type': 'cli', 'cli': 'codex',
+     'emoji': '🟧', 'proc_match': r'node.*codex'},
+    {'id': 'windsurf', 'name': 'Windsurf', 'type': 'app', 'bundle': 'Windsurf.app',
+     'emoji': '🌪️', 'proc_match': 'Windsurf.app'},
+    {'id': 'trae', 'name': 'Trae', 'type': 'app', 'bundle': 'Trae.app',
+     'emoji': '🚀', 'proc_match': 'Trae.app'},
+    {'id': 'aider', 'name': 'Aider', 'type': 'cli', 'cli': 'aider',
+     'emoji': '🤝', 'proc_match': r'aider'},
+    {'id': 'copilot-cli', 'name': 'GitHub Copilot CLI', 'type': 'cli', 'cli': 'gh',
+     'emoji': '🐙', 'proc_match': r'copilot'},
+    {'id': 'continue', 'name': 'Continue', 'type': 'cli', 'cli': 'continue',
+     'emoji': '⏩', 'proc_match': 'continue'},
+]
+
+
+def _which(cmd):
+    """which 命令封装：返回命令路径或 None"""
+    try:
+        r = subprocess.run(['which', cmd], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _scan_ai_installed():
+    """检测本机已安装的 AI 工具。返回 [{id,name,emoji,installed,path,type}]"""
+    result = []
+    home = os.path.expanduser('~')
+    for t in AI_TOOLS:
+        item = {'id': t['id'], 'name': t['name'], 'emoji': t['emoji'],
+                'type': t['type'], 'installed': False, 'path': ''}
+        if t['type'] == 'app':
+            bundle = t['bundle']
+            for base in ('/Applications', os.path.join(home, 'Applications')):
+                p = os.path.join(base, bundle)
+                if os.path.isdir(p):
+                    item['installed'] = True
+                    item['path'] = p
+                    break
+        else:  # cli
+            p = _which(t['cli'])
+            if p:
+                item['installed'] = True
+                item['path'] = p
+        result.append(item)
+    return result
+
+
+def _format_uptime(seconds):
+    """把秒数格式化为 '2h15m' / '3d5h' / '12m'"""
+    if seconds < 60:
+        return '<1m'
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    d, h = divmod(h, 24)
+    if d > 0:
+        return f'{d}d{h}h'
+    if h > 0:
+        return f'{h}h{m}m'
+    return f'{m}m'
+
+
+def _scan_ai_processes():
+    """扫描运行中的 AI 进程。返回 [{pid,name,tool,cpu,mem,uptime}]。
+    资源数据优先用 psutil，否则回退 ps 命令。"""
+    procs = []
+    running_tool_ids = set()
+
+    # 第一步：找出每个工具的匹配进程 pid
+    pid_to_tool = {}  # pid -> tool_id
+    for t in AI_TOOLS:
+        match = t.get('proc_match', '')
+        if not match:
+            continue
+        try:
+            r = subprocess.run(['pgrep', '-lf', match], capture_output=True,
+                               text=True, timeout=5)
+            if r.returncode == 0:
+                for line in r.stdout.strip().split('\n'):
+                    if not line:
+                        continue
+                    parts = line.split(None, 1)
+                    pid = int(parts[0])
+                    pid_to_tool[pid] = t['id']
+                    running_tool_ids.add(t['id'])
+        except Exception:
+            continue
+
+    if not pid_to_tool:
+        return {'processes': [], 'runningToolIds': []}
+
+    tool_name = {t['id']: t['name'] for t in AI_TOOLS}
+
+    if HAS_PSUTIL:
+        for pid, tool_id in pid_to_tool.items():
+            try:
+                p = psutil.Process(pid)
+                info = {
+                    'pid': pid,
+                    'name': tool_name.get(tool_id, p.name()),
+                    'tool': tool_id,
+                    'cpu': round(p.cpu_percent(interval=0.1), 1),
+                    'mem': round(p.memory_info().rss / 1024 / 1024, 1),  # MB
+                    'uptime': _format_uptime(time.time() - p.create_time()),
+                }
+                procs.append(info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    else:
+        # 回退：ps -o 解析。一次性取所有目标 pid 的资源数据。
+        pids = list(pid_to_tool.keys())
+        try:
+            r = subprocess.run(
+                ['ps', '-o', 'pid=,pcpu=,rss=,etime=,command='] + [str(x) for x in pids],
+                capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                for line in r.stdout.strip().split('\n'):
+                    parts = line.split(None, 4)
+                    if len(parts) < 5:
+                        continue
+                    try:
+                        pid = int(parts[0])
+                    except ValueError:
+                        continue
+                    if pid not in pid_to_tool:
+                        continue
+                    cpu = round(float(parts[1]), 1)
+                    mem = round(int(parts[2]) / 1024, 1)  # KB→MB
+                    # etime 形如 'dd-hh:mm:ss' 或 'hh:mm:ss' 或 'mm:ss'
+                    procs.append({
+                        'pid': pid,
+                        'name': tool_name.get(pid_to_tool[pid], parts[4][:40]),
+                        'tool': pid_to_tool[pid],
+                        'cpu': cpu,
+                        'mem': mem,
+                        'uptime': parts[3],
+                    })
+        except Exception:
+            pass
+
+    # 按 CPU 降序
+    procs.sort(key=lambda x: x.get('cpu', 0), reverse=True)
+    return {'processes': procs, 'runningToolIds': list(running_tool_ids)}
+
+
+def _count_ai_calls():
+    """统计外部 AI 工具的调用/会话数。返回 {claudeCodeSessions, codexCalls, partnerCliCalls}"""
+    result = {'claudeCodeSessions': 0, 'codexCalls': 0, 'partnerCliCalls': 0}
+
+    # Claude Code 会话数 = ~/.claude/projects 下 jsonl 文件数
+    home = os.path.expanduser('~')
+    claude_projects = os.path.join(home, '.claude', 'projects')
+    try:
+        result['claudeCodeSessions'] = len(glob.glob(os.path.join(claude_projects, '**', '*.jsonl'), recursive=True))
+    except Exception:
+        pass
+
+    # PartnerFM 通过 shell 调用外部 CLI 的次数（扫用量记录中 agentId 为 cli/rest）
+    try:
+        data = _load_json(USAGE_FILE, {'usage': []})
+        cli_calls = sum(1 for e in data.get('usage', []) if e.get('agentId') in ('cli', 'rest'))
+        result['partnerCliCalls'] = cli_calls
+    except Exception:
+        pass
+
+    return result
+
+
+# 本地 token 用量扫描缓存（opentoken 扫描较慢，30 秒内复用）
+_TOKEN_CACHE = {'data': None, 'ts': 0}
+_TOKEN_CACHE_TTL = 30
+
+# opentoken 工具名 → 显示名映射
+_OPENTOKEN_TOOL_NAMES = {
+    'claude-code': 'Claude Code',
+    'codex': 'Codex CLI',
+    'cursor': 'Cursor',
+    'cline': 'Cline',
+    'copilot': 'GitHub Copilot',
+    'aider': 'Aider',
+    'continue': 'Continue',
+    'windsurf': 'Windsurf',
+    'gemini': 'Gemini CLI',
+    'opencode': 'OpenCode',
+    'hermes': 'Hermes',
+    'workbuddy': 'WorkBuddy',
+    'zcode': 'ZCode',
+}
+
+
+def _find_opentoken():
+    """查找 opentoken 可执行文件路径：先 ~/.local/bin，再 PATH"""
+    home = os.path.expanduser('~')
+    p = os.path.join(home, '.local', 'bin', 'opentoken')
+    if os.path.isfile(p) and os.access(p, os.X_OK):
+        return p
+    return _which('opentoken')
+
+
+def _scan_local_tokens():
+    """调用 opentoken preview --json，解析本地 AI 工具的真实 token 用量。
+    返回 {available, tools:[{id,name,total,input,output,cacheRead,cacheWrite,records,models,byDate,byModel}], grandTotal, dateRange}。
+    30 秒内复用缓存。"""
+    now = time.time()
+    if _TOKEN_CACHE['data'] and now - _TOKEN_CACHE['ts'] < _TOKEN_CACHE_TTL:
+        return _TOKEN_CACHE['data']
+
+    exe = _find_opentoken()
+    if not exe:
+        result = {'available': False, 'reason': 'opentoken 未安装',
+                  'installHint': 'curl -fsSL https://scys.com/tokenrank/install.sh | sh'}
+        _TOKEN_CACHE['data'] = result
+        _TOKEN_CACHE['ts'] = now
+        return result
+
+    try:
+        r = subprocess.run([exe, 'preview', '--json'], capture_output=True,
+                           text=True, timeout=60)
+        if r.returncode != 0:
+            result = {'available': False, 'reason': 'opentoken 执行失败: ' + r.stderr[:200]}
+            _TOKEN_CACHE['data'] = result
+            _TOKEN_CACHE['ts'] = now
+            return result
+        raw = json.loads(r.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
+        result = {'available': False, 'reason': '解析失败: ' + str(e)[:200]}
+        _TOKEN_CACHE['data'] = result
+        _TOKEN_CACHE['ts'] = now
+        return result
+
+    # 聚合：按 tool 汇总，同时保留 byDate / byModel 明细
+    # 真实总消耗 = input + output + cache_read + cache_write（含缓存读取，反映实际 token 吞吐）
+    def _real_tokens(rec):
+        return (rec.get('input', 0) + rec.get('output', 0)
+                + rec.get('cache_read', 0) + rec.get('cache_write', 0))
+
+    tools_map = {}  # tool_id -> aggregates
+    all_dates = set()
+    grand_total = 0
+    for rec in raw:
+        tid = rec.get('tool', 'unknown')
+        all_dates.add(rec.get('date', ''))
+        grand_total += _real_tokens(rec)
+        if tid not in tools_map:
+            tools_map[tid] = {
+                'id': tid,
+                'name': _OPENTOKEN_TOOL_NAMES.get(tid, tid),
+                'total': 0, 'input': 0, 'output': 0,
+                'cacheRead': 0, 'cacheWrite': 0, 'records': 0,
+                'byDate': {}, 'byModel': {},
+            }
+        agg = tools_map[tid]
+        real = _real_tokens(rec)
+        agg['total'] += real
+        agg['input'] += rec.get('input', 0)
+        agg['output'] += rec.get('output', 0)
+        agg['cacheRead'] += rec.get('cache_read', 0)
+        agg['cacheWrite'] += rec.get('cache_write', 0)
+        agg['records'] += 1
+        # byDate
+        d = rec.get('date', '')
+        if d:
+            agg['byDate'][d] = agg['byDate'].get(d, 0) + real
+        # byModel
+        m = rec.get('model', 'unknown')
+        agg['byModel'][m] = agg['byModel'].get(m, 0) + real
+
+    tools_list = sorted(tools_map.values(), key=lambda x: x['total'], reverse=True)
+    # 每个 tool 的 models 取列表
+    for t in tools_list:
+        t['models'] = sorted(t['byModel'].keys())
+
+    dates_sorted = sorted(d for d in all_dates if d)
+
+    # 全局按日期聚合（所有工具每日合计）—— 用于历史趋势图
+    global_by_date = {}
+    # byToolByDate: {date: [{tool, tokens, color_idx}]} —— 用于堆叠/明细
+    for t in tools_list:
+        for d, v in t.get('byDate', {}).items():
+            global_by_date[d] = global_by_date.get(d, 0) + v
+
+    # 补齐日期范围内的空缺天（连续天数），让趋势图不断裂
+    by_date_full = []
+    if dates_sorted:
+        from datetime import datetime as _dt, timedelta as _td
+        start_d = _dt.strptime(dates_sorted[0], '%Y-%m-%d')
+        end_d = _dt.strptime(dates_sorted[-1], '%Y-%m-%d')
+        cur = start_d
+        while cur <= end_d:
+            ds = cur.strftime('%Y-%m-%d')
+            by_date_full.append({'date': ds, 'tokens': global_by_date.get(ds, 0)})
+            cur += _td(days=1)
+
+    result = {
+        'available': True,
+        'tools': tools_list,
+        'grandTotal': grand_total,
+        'dateRange': {'start': dates_sorted[0] if dates_sorted else '',
+                      'end': dates_sorted[-1] if dates_sorted else ''},
+        'toolCount': len(tools_list),
+        'byDate': by_date_full,  # [{date, tokens}] 连续日期序列
+        'totalDays': len([x for x in by_date_full if x['tokens'] > 0]),
+    }
+    _TOKEN_CACHE['data'] = result
+    _TOKEN_CACHE['ts'] = now
+    return result
+
+
+# ===== Embedding 配置 + SQLite 向量索引 =====
+
+DEFAULT_EMBEDDING = {
+    "provider": "",
+    "api_key": "",
+    "base_url": "https://api.openai.com/v1",
+    "model": "text-embedding-3-small",
+    "dimensions": 0  # 0=未测过，首次调用后自动填
+}
+
+# ===== 数据监测平台配置（通用适配，支持多数据源） =====
+DEFAULT_DATA_PLATFORMS = {
+    "sources": {
+        "redfox": {
+            "name": "RedFox",
+            "base_url": "https://api.redfox.hk/v1",
+            "api_key": "",
+            "auth_header": "Authorization",
+            "auth_prefix": "Bearer "
+        }
+    },
+    "active": "redfox",
+    "channels": [
+        {"id": "douyin", "name": "抖音"},
+        {"id": "xiaohongshu", "name": "小红书"},
+        {"id": "wechat", "name": "公众号"},
+        {"id": "shipinhao", "name": "视频号"}
+    ]
+}
+
+# action → URL 路径映射（集中管理，换数据源只改这里）
+DATA_ACTION_PATHS = {
+    "search_account": "/search/account",
+    "search_note": "/search/note",
+    "hot_list": "/hot/list",
+    "account_detail": "/account/detail",
+    "hot_search": "/hot/search",
+    "explore": "/explore"
+}
+
+
+def _call_data_api(cfg, action, channel, params):
+    """调用数据平台 API。cfg=配置字典，action=操作名，channel=平台ID，params=参数字典。
+    按 DATA_ACTION_PATHS 拼 URL，带 auth header 转发，返回解析后的 JSON。"""
+    # 取活跃数据源
+    sources = cfg.get('sources', {})
+    active_id = cfg.get('active', '')
+    source = sources.get(active_id, {}) if active_id else (list(sources.values())[0] if sources else {})
+    if not source:
+        raise ValueError('请先添加数据源')
+    base_url = source.get('base_url', '').rstrip('/')
+    api_key = source.get('api_key', '')
+    auth_header = source.get('auth_header', 'Authorization')
+    auth_prefix = source.get('auth_prefix', 'Bearer ')
+
+    if not api_key or not base_url:
+        raise ValueError('请先配置数据平台的 Base URL 和 API Key')
+
+    # 拼接路径：先尝试配置里的 action→path 模板，否则用全局 DATA_ACTION_PATHS
+    path_tmpl = cfg.get('actions', {}).get(action) or DATA_ACTION_PATHS.get(action, '/')
+    path = path_tmpl.replace('{channel}', channel or '')
+    if channel and '{channel}' not in path_tmpl and path_tmpl != '/':
+        path = path_tmpl.rstrip('/') + '/' + channel
+
+    # 拼接 URL + query params
+    url = base_url + path
+    qs_parts = []
+    for k, v in (params or {}).items():
+        if v:
+            qs_parts.append(f'{urllib.parse.quote(str(k))}={urllib.parse.quote(str(v))}')
+    if qs_parts:
+        url += '?' + '&'.join(qs_parts)
+
+    headers = {
+        'Content-Type': 'application/json',
+        auth_header: auth_prefix + api_key
+    }
+    req = urllib.request.Request(url, headers=headers, method='GET')
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode('utf-8')
+        data = json.loads(raw)
+    # RedFox 等平台常用 data.data 包裹，自动解一层
+    if isinstance(data, dict) and 'data' in data and isinstance(data['data'], (list, dict)):
+        return data['data']
+    return data
+
+
+# embedding 内存缓存：text -> vector（避免同一 query 重复算）
+_embed_cache = {}
+_EMBED_CACHE_MAX = 200
+
+_db_lock = threading.Lock()
+
+
+def _get_embedding_config():
+    """读取 embedding 配置，缺失字段用默认值补全。"""
+    cfg = _load_json(EMBEDDING_FILE, dict(DEFAULT_EMBEDDING))
+    merged = dict(DEFAULT_EMBEDDING)
+    merged.update(cfg)
+    return merged
+
+
+def _embed_texts(texts):
+    """批量把文本转成向量。返回 list[list[float]]，失败抛异常。
+    走配置的 OpenAI 兼容 embedding API（/embeddings 端点）。"""
+    if not texts:
+        return []
+    cfg = _get_embedding_config()
+    if not cfg.get('api_key') or not cfg.get('base_url') or not cfg.get('model'):
+        raise ValueError('未配置 embedding，请在模型管理模块配置「向量检索」')
+    # 拆出未缓存的
+    todo_idx = [i for i, t in enumerate(texts) if t not in _embed_cache]
+    results = [None] * len(texts)
+    for i, t in enumerate(texts):
+        if t in _embed_cache:
+            results[i] = _embed_cache[t]
+    if todo_idx:
+        todo_texts = [texts[i] for i in todo_idx]
+        url = cfg['base_url'].rstrip('/') + '/embeddings'
+        payload = json.dumps({'model': cfg['model'], 'input': todo_texts}).encode('utf-8')
+        req = urllib.request.Request(url, data=payload, headers={
+            'Content-Type': 'application/json',
+            'Authorization': f"Bearer {cfg['api_key']}"
+        }, method='POST')
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        vecs = [item['embedding'] for item in data['data']]
+        # 记录维度
+        if vecs and not cfg.get('dimensions'):
+            cfg['dimensions'] = len(vecs[0])
+            _save_json(EMBEDDING_FILE, cfg)
+        for idx, t, v in zip(todo_idx, todo_texts, vecs):
+            results[idx] = v
+            if len(_embed_cache) >= _EMBED_CACHE_MAX:
+                _embed_cache.pop(next(iter(_embed_cache)))  # 淘汰最老的
+            _embed_cache[t] = v
+    return results
+
+
+def _init_db():
+    """初始化 SQLite 索引库（幂等）。"""
+    with _db_lock:
+        conn = sqlite3.connect(INDEX_DB)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('''CREATE TABLE IF NOT EXISTS chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            embedding BLOB,
+            file_mtime REAL,
+            indexed_at REAL,
+            UNIQUE(workspace, file_path, chunk_index)
+        )''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_ws_file ON chunks(workspace, file_path)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_workspace ON chunks(workspace)')
+        conn.commit()
+        conn.close()
+
+
+def _chunk_text(text, size=500, overlap=100):
+    """把长文本切成带重叠的小块。"""
+    if len(text) <= size:
+        return [text]
+    chunks = []
+    i = 0
+    while i < len(text):
+        chunks.append(text[i:i + size])
+        if i + size >= len(text):
+            break
+        i += max(1, size - overlap)
+    return chunks
+
+
+def _iter_text_files(root):
+    """递归遍历 root 下的文本类文件，yield (abspath, relpath, mtime)。"""
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fname in files:
+            if fname.startswith('.'):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext and ext not in TEXT_EXTS:
+                continue
+            fp = os.path.join(dirpath, fname)
+            try:
+                mtime = os.path.getmtime(fp)
+            except OSError:
+                continue
+            yield fp, os.path.relpath(fp, root), mtime
+
+
+def _iter_image_files(root):
+    """递归遍历 root 下的图片文件，yield (abspath, relpath, mtime)。"""
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fname in files:
+            if fname.startswith('.'):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            fp = os.path.join(dirpath, fname)
+            try:
+                mtime = os.path.getmtime(fp)
+            except OSError:
+                continue
+            yield fp, os.path.relpath(fp, root), mtime
+
+
+def _ocr_image(filepath):
+    """对图片文件做 OCR 文字识别，返回识别出的文本。失败返回空字符串。"""
+    if not _OCR_AVAILABLE:
+        return ''
+    try:
+        img = Image.open(filepath)
+        # 如果图片太大，缩小以提高 OCR 速度
+        w, h = img.size
+        max_dim = 2000
+        if w > max_dim or h > max_dim:
+            ratio = max_dim / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        # 支持中英文
+        text = pytesseract.image_to_string(img, lang='chi_sim+eng')
+        return text.strip()
+    except Exception:
+        return ''
+
+
+def _extract_pdf_text(filepath):
+    """用 pdfplumber 提取 PDF 文本内容。失败返回空字符串。"""
+    if not _PDF_AVAILABLE:
+        return ''
+    try:
+        with pdfplumber.open(filepath) as pdf:
+            texts = []
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    texts.append(t)
+            return '\n'.join(texts)
+    except Exception:
+        return ''
+
+
+def _extract_docx_text(filepath):
+    """用 python-docx 提取 .docx 文本内容。失败返回空字符串。"""
+    if not _DOCX_AVAILABLE:
+        return ''
+    try:
+        doc = docx.Document(filepath)
+        texts = [p.text for p in doc.paragraphs if p.text.strip()]
+        return '\n'.join(texts)
+    except Exception:
+        return ''
+
+
+def _extract_doc_text(filepath):
+    """用 LibreOffice 将 .doc 转为 PDF 后提取文本。失败返回空字符串。"""
+    if not _PDF_AVAILABLE:
+        return ''
+    lo_path = _find_libreoffice()
+    if not lo_path:
+        return ''
+    tmpdir = tempfile.mkdtemp(prefix='partnerfm-doc-')
+    try:
+        result = subprocess.run(
+            [lo_path, '--headless', '--convert-to', 'pdf', '--outdir', tmpdir, filepath],
+            capture_output=True, text=True, timeout=60
+        )
+        base = os.path.splitext(os.path.basename(filepath))[0]
+        pdf_path = os.path.join(tmpdir, base + '.pdf')
+        if not os.path.exists(pdf_path):
+            pdfs = [f for f in os.listdir(tmpdir) if f.endswith('.pdf')]
+            if pdfs:
+                pdf_path = os.path.join(tmpdir, pdfs[0])
+            else:
+                return ''
+        return _extract_pdf_text(pdf_path)
+    except Exception:
+        return ''
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _read_file_content(filepath):
+    """根据文件扩展名选择合适的读取方式，返回文本内容。"""
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == '.pdf':
+        return _extract_pdf_text(filepath)
+    elif ext == '.docx':
+        return _extract_docx_text(filepath)
+    elif ext == '.doc':
+        return _extract_doc_text(filepath)
+    else:
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                return f.read()
+        except OSError:
+            return ''
+
+
+def _index_workspace(wpath, progress_cb=None):
+    """增量索引一个工作区。
+    progress_cb(done, total, msg) 用于 SSE 进度推送。
+    返回 (indexed_count, skipped_count, removed_count)。"""
+    _init_db()
+    ws_key = os.path.normpath(wpath)
+    # 1. 收集当前文件清单
+    files = list(_iter_text_files(wpath))
+    total = len(files)
+
+    # 2. 读出已索引的文件 mtime
+    with _db_lock:
+        conn = sqlite3.connect(INDEX_DB)
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            'SELECT file_path, MAX(file_mtime) AS mtime FROM chunks WHERE workspace=? GROUP BY file_path',
+            (ws_key,))
+        indexed = {row['file_path']: row['mtime'] for row in cur.fetchall()}
+        conn.close()
+
+    # 3. 找需要更新的（新增或 mtime 变了）
+    todo = [(fp, rel, mt) for fp, rel, mt in files
+            if rel not in indexed or abs((indexed.get(rel) or 0) - mt) > 1]
+    # 4. 找已删除的
+    current_rels = {rel for _, rel, _ in files}
+    removed = [rel for rel in indexed if rel not in current_rels]
+
+    # 5. 删除已失效的
+    if removed:
+        with _db_lock:
+            conn = sqlite3.connect(INDEX_DB)
+            conn.executemany(
+                'DELETE FROM chunks WHERE workspace=? AND file_path=?',
+                [(ws_key, rel) for rel in removed])
+            conn.commit()
+            conn.close()
+
+    # 6. 索引 todo 中的文件
+    indexed_count = 0
+    skipped = 0
+    for i, (fp, rel, mt) in enumerate(todo):
+        try:
+            content = _read_file_content(fp)
+        except Exception:
+            skipped += 1
+            continue
+        if not content.strip():
+            skipped += 1
+            continue
+        chunks = _chunk_text(content)
+        # 删旧 chunks
+        with _db_lock:
+            conn = sqlite3.connect(INDEX_DB)
+            conn.execute('DELETE FROM chunks WHERE workspace=? AND file_path=?', (ws_key, rel))
+            conn.close()
+        # 批量 embedding（限流：一次最多 20 块）
+        now = time.time()
+        for batch_start in range(0, len(chunks), 20):
+            batch = chunks[batch_start:batch_start + 20]
+            try:
+                vecs = _embed_texts(batch)
+            except Exception as e:
+                skipped += len(batch)
+                if progress_cb:
+                    progress_cb(i + 1, len(todo), f'embedding 失败：{e}')
+                continue
+            rows = []
+            for ci, (text, vec) in enumerate(zip(batch, vecs), start=batch_start):
+                blob = sqlite3.Binary(_vec_to_bytes(vec)) if vec else None
+                rows.append((ws_key, rel, ci, text, blob, mt, now))
+            with _db_lock:
+                conn = sqlite3.connect(INDEX_DB)
+                conn.executemany(
+                    'INSERT OR REPLACE INTO chunks(workspace,file_path,chunk_index,text,embedding,file_mtime,indexed_at) VALUES(?,?,?,?,?,?,?)',
+                    rows)
+                conn.commit()
+                conn.close()
+            indexed_count += len(batch)
+        if progress_cb and (i % 5 == 0 or i == len(todo) - 1):
+            progress_cb(i + 1, len(todo), f'已索引 {rel}')
+
+    # 7. 索引图片文件（OCR 文字识别）
+    ocr_count = 0
+    ocr_skipped = 0
+    if _OCR_AVAILABLE:
+        img_files = list(_iter_image_files(wpath))
+        img_todo = [(fp, rel, mt) for fp, rel, mt in img_files
+                    if rel not in indexed or abs((indexed.get(rel) or 0) - mt) > 1]
+        # 清理已删除的图片
+        img_current_rels = {rel for _, rel, _ in img_files}
+        img_removed = [rel for rel in indexed if rel not in img_current_rels]
+        if img_removed:
+            with _db_lock:
+                conn = sqlite3.connect(INDEX_DB)
+                conn.executemany(
+                    'DELETE FROM chunks WHERE workspace=? AND file_path=?',
+                    [(ws_key, rel) for rel in img_removed])
+                conn.commit()
+                conn.close()
+        now = time.time()
+        for i, (fp, rel, mt) in enumerate(img_todo):
+            try:
+                ocr_text = _ocr_image(fp)
+            except Exception:
+                ocr_skipped += 1
+                continue
+            if not ocr_text:
+                ocr_skipped += 1
+                continue
+            # 删除旧图片 chunks
+            with _db_lock:
+                conn = sqlite3.connect(INDEX_DB)
+                conn.execute('DELETE FROM chunks WHERE workspace=? AND file_path=?', (ws_key, rel))
+                conn.close()
+            # 图片 OCR 文本也分块，但不建 embedding（embedding 为 NULL）
+            chunks = _chunk_text(ocr_text)
+            rows = []
+            for ci, text in enumerate(chunks):
+                rows.append((ws_key, rel, ci, text, None, mt, now))
+            with _db_lock:
+                conn = sqlite3.connect(INDEX_DB)
+                conn.executemany(
+                    'INSERT OR REPLACE INTO chunks(workspace,file_path,chunk_index,text,embedding,file_mtime,indexed_at) VALUES(?,?,?,?,?,?,?)',
+                    rows)
+                conn.commit()
+                conn.close()
+            ocr_count += len(chunks)
+            if progress_cb and (i % 3 == 0 or i == len(img_todo) - 1):
+                progress_cb(i + 1, len(img_todo), f'OCR 识别 {rel}')
+        if progress_cb:
+            progress_cb(len(img_todo), len(img_todo),
+                        f'图片 OCR 完成：{len(img_todo)} 张，识别 {ocr_count} 块，跳过 {ocr_skipped} 张')
+
+    return indexed_count + ocr_count, skipped + ocr_skipped, len(removed)
+
+
+def _vec_to_bytes(vec):
+    """list[float] -> bytes（用 numpy 降精度到 float32 省空间）。"""
+    if np is None:
+        import struct
+        return struct.pack(f'{len(vec)}f', *vec)
+    return np.asarray(vec, dtype=np.float32).tobytes()
+
+
+def _bytes_to_vec(blob):
+    """bytes -> numpy float32 向量。"""
+    if np is None:
+        import struct
+        return list(struct.unpack(f'{len(blob)//4}f', blob))
+    return np.frombuffer(blob, dtype=np.float32)
+
+
+def _search_semantic(wpath, query, top_k=8):
+    """语义搜索：query → 向量 → 余弦相似 top-k chunks。
+    返回 list[dict]：{file_path, text, score}。"""
+    if np is None:
+        return [{'error': 'numpy 未安装，无法做向量检索'}]
+    cfg = _get_embedding_config()
+    if not cfg.get('api_key'):
+        return [{'error': '未配置 embedding，请在模型管理配置向量检索'}]
+    ws_key = os.path.normpath(wpath)
+    # query 向量
+    try:
+        qvecs = _embed_texts([query])
+    except Exception as e:
+        return [{'error': f'embedding 失败：{e}'}]
+    if not qvecs:
+        return []
+    qvec = np.asarray(qvecs[0], dtype=np.float32)
+    qnorm = np.linalg.norm(qvec) + 1e-8
+    # 取所有 chunks
+    with _db_lock:
+        conn = sqlite3.connect(INDEX_DB)
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            'SELECT file_path, chunk_index, text, embedding FROM chunks WHERE workspace=? AND embedding IS NOT NULL',
+            (ws_key,))
+        rows = cur.fetchall()
+        conn.close()
+    if not rows:
+        return [{'error': '该工作区尚未建立索引，请先在侧边栏点击索引图标'}]
+    scored = []
+    for r in rows:
+        vec = _bytes_to_vec(r['embedding'])
+        vnorm = np.linalg.norm(vec) + 1e-8
+        sim = float(np.dot(qvec, vec) / (qnorm * vnorm))
+        scored.append((sim, r['file_path'], r['chunk_index'], r['text']))
+    scored.sort(reverse=True)
+    # 按文件去重，每个文件最多取 1 个最高分块
+    seen = {}
+    result = []
+    for sim, fp, ci, text in scored:
+        if fp in seen:
+            continue
+        seen[fp] = True
+        snippet = text[:300].replace('\n', ' ')
+        result.append({'file_path': fp, 'score': round(sim, 3), 'snippet': snippet})
+        if len(result) >= top_k:
+            break
+    return result
+
+
+def _index_status(wpath):
+    """返回某工作区的索引状态。"""
+    _init_db()
+    ws_key = os.path.normpath(wpath)
+    with _db_lock:
+        conn = sqlite3.connect(INDEX_DB)
+        cur = conn.execute(
+            'SELECT COUNT(DISTINCT file_path) AS files, MAX(indexed_at) AS last FROM chunks WHERE workspace=?',
+            (ws_key,))
+        row = cur.fetchone()
+        conn.close()
+    indexed_files, last = row[0] or 0, row[1]
+    # 对比当前文件数判断是否过期
+    current_files = sum(1 for _ in _iter_text_files(wpath))
+    stale = current_files != indexed_files
+    return {'indexed_files': indexed_files, 'current_files': current_files,
+            'last_indexed': last, 'stale': stale}
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_GET(self):
+        # 根路径和 index.html 从包内 static/ 目录提供
+        if self.path in ('/', '/index.html'):
+            return self._serve_static('index.html')
+        if self.path == '/api/state':
+            return self._serve_json(_load_json(STATE_FILE, {}))
+        if self.path == '/api/models':
+            return self._serve_json(_load_json(MODELS_FILE, {"models": []}))
+        if self.path == '/api/cli':
+            data = _load_json(CLI_FILE, {"items": DEFAULT_CLI, "enabled": list(DEFAULT_CLI.keys())})
+            return self._serve_json(data)
+        if self.path == '/api/mcp':
+            data = _load_json(MCP_FILE, {"items": DEFAULT_MCP, "enabled": list(DEFAULT_MCP.keys())})
+            return self._serve_json(data)
+        if self.path == '/api/chats':
+            return self._serve_json(_load_json(CHAT_FILE, DEFAULT_CHATS))
+        if self.path == '/api/prompts':
+            return self._serve_json(_load_json(PROMPTS_FILE, DEFAULT_PROMPTS))
+        if self.path == '/api/workspaces':
+            return self._serve_json(_load_json(WORKSPACES_FILE, DEFAULT_WORKSPACES))
+        if self.path == '/api/skills':
+            return self._serve_json(_load_json(SKILLS_FILE, DEFAULT_SKILLS))
+        if self.path == '/api/roles':
+            return self._serve_json(_load_json(ROLES_FILE, DEFAULT_ROLES))
+        if self.path == '/api/agent-config':
+            return self._serve_json({
+                'tools': ['list_dir', 'read_file', 'write_file', 'search_files',
+                          'semantic_search', 'file_stats', 'recent_files',
+                          'web_search', 'web_fetch', 'invoke_agent', 'run_shell'],
+                'max_iterations': 10
+            })
+        if self.path == '/api/agents':
+            return self._serve_json(_load_json(AGENTS_FILE, DEFAULT_AGENTS))
+        if self.path == '/api/project-agents':
+            return self._serve_json(_load_json(PROJECT_AGENTS_FILE, DEFAULT_PROJECT_AGENTS))
+        if self.path == '/api/logs':
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            limit = int(qs.get('limit', [100])[0])
+            agent_id = qs.get('agent', [None])[0]
+            status = qs.get('status', [None])[0]
+            return self._serve_json({'logs': _get_logs(limit=limit, agent_id=agent_id, status=status)})
+        if self.path.startswith('/api/usage'):
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            days = int(qs.get('days', [30])[0])
+            entries = _get_usage(days=days)
+            # 按日期聚合
+            by_date = {}
+            by_model = {}
+            by_agent = {}
+            for e in entries:
+                d = e['date']
+                m = e['modelId']
+                a = e['agentName'] or e['agentId']
+                if d not in by_date:
+                    by_date[d] = {'tokens': 0, 'cost': 0, 'models': {}}
+                by_date[d]['tokens'] += e['totalTokens']
+                by_date[d]['cost'] += e['cost']
+                if m not in by_date[d]['models']:
+                    by_date[d]['models'][m] = {'tokens': 0, 'cost': 0, 'calls': 0}
+                by_date[d]['models'][m]['tokens'] += e['totalTokens']
+                by_date[d]['models'][m]['cost'] += e['cost']
+                by_date[d]['models'][m]['calls'] += 1
+                if m not in by_model:
+                    by_model[m] = {'tokens': 0, 'cost': 0, 'calls': 0}
+                by_model[m]['tokens'] += e['totalTokens']
+                by_model[m]['cost'] += e['cost']
+                by_model[m]['calls'] += 1
+                if a not in by_agent:
+                    by_agent[a] = {'tokens': 0, 'cost': 0, 'calls': 0}
+                by_agent[a]['tokens'] += e['totalTokens']
+                by_agent[a]['cost'] += e['cost']
+                by_agent[a]['calls'] += 1
+
+            total_tokens = sum(e['totalTokens'] for e in entries)
+            total_cost = sum(e['cost'] for e in entries)
+
+            return self._serve_json({
+                'totalTokens': total_tokens,
+                'totalCost': round(total_cost, 4),
+                'days': len(by_date),
+                'byDate': {d: {'tokens': v['tokens'], 'cost': round(v['cost'],4), 'models': {m: {'tokens': vm['tokens'], 'cost': round(vm['cost'],4), 'calls': vm['calls']} for m,vm in v['models'].items()}} for d,v in sorted(by_date.items())},
+                'byModel': {m: {'tokens': v['tokens'], 'cost': round(v['cost'],4), 'calls': v['calls']} for m,v in sorted(by_model.items())},
+                'byAgent': {a: {'tokens': v['tokens'], 'cost': round(v['cost'],4), 'calls': v['calls']} for a,v in sorted(by_agent.items())},
+            })
+        if self.path.startswith('/api/ai-monitor'):
+            installed = _scan_ai_installed()
+            proc_data = _scan_ai_processes()
+            # 用运行中的工具 id 标记 installed 列表的状态
+            running_ids = set(proc_data.get('runningToolIds', []))
+            for t in installed:
+                if t['installed'] and t['id'] in running_ids:
+                    t['status'] = 'running'
+                elif t['installed']:
+                    t['status'] = 'idle'
+                else:
+                    t['status'] = 'missing'
+            return self._serve_json({
+                'tools': installed,
+                'processes': proc_data.get('processes', []),
+                'calls': _count_ai_calls(),
+                'hasPsutil': HAS_PSUTIL,
+                'tokens': _scan_local_tokens(),
+            })
+        if self.path == '/api/embedding-config':
+            return self._serve_json(_get_embedding_config())
+        # index-status 支持 ?workspace=xxx
+        if self.path.startswith('/api/index-status'):
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            ws = qs.get('workspace', [''])[0]
+            ws_path = os.path.expanduser(ws) if ws else None
+            if not ws_path or not os.path.isdir(ws_path):
+                return self._serve_json({'error': 'workspace 路径无效'}, 400)
+            try:
+                return self._serve_json(_index_status(ws_path))
+            except Exception as e:
+                return self._serve_json({'error': str(e)}, 500)
+        if self.path == '/api/mcp-status':
+            mcp_data = _load_json(MCP_FILE, {'items': DEFAULT_MCP, 'enabled': list(DEFAULT_MCP.keys())})
+            items = mcp_data.get('items', {})
+            enabled_ids = mcp_data.get('enabled', [])
+            status = {}
+            for sid in enabled_ids:
+                cfg = items.get(sid, {})
+                cmd = cfg.get('command', '')
+                if cmd:
+                    client = _get_mcp_client(sid, cmd)
+                    # Ensure running
+                    if not client.process or client.process.poll() is not None:
+                        client.start()
+                    status[sid] = client.get_status()
+                else:
+                    status[sid] = {'running': False, 'initialized': False, 'tool_count': 0, 'error': '无启动命令'}
+            return self._serve_json({'status': status, 'enabled': enabled_ids})
+        if self.path == '/api/health':
+            return self._serve_json({'ok': True})
+        if self.path == '/api/data-platforms':
+            cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
+            # 返回配置时所有数据源的 api_key 脱敏
+            safe = json.loads(json.dumps(cfg))
+            for sid, src in safe.get('sources', {}).items():
+                key = src.get('api_key', '')
+                if key:
+                    src['api_key'] = key[:4] + '***' + key[-4:] if len(key) > 8 else '***'
+            return self._serve_json(safe)
+        if self.path == '/api/engines':
+            return self._serve_engines()
+        return super().do_GET()
+
+    def do_POST(self):
+        if self.path == '/api/state':
+            return self._save_json_endpoint(STATE_FILE)
+        if self.path == '/api/models':
+            return self._save_json_endpoint(MODELS_FILE)
+        if self.path == '/api/cli':
+            return self._save_json_endpoint(CLI_FILE)
+        if self.path == '/api/mcp':
+            return self._save_json_endpoint(MCP_FILE)
+        if self.path == '/api/chats':
+            return self._save_json_endpoint(CHAT_FILE)
+        if self.path == '/api/prompts':
+            return self._save_json_endpoint(PROMPTS_FILE)
+        if self.path == '/api/workspaces':
+            return self._save_json_endpoint(WORKSPACES_FILE)
+        if self.path == '/api/skills':
+            return self._save_json_endpoint(SKILLS_FILE)
+        if self.path == '/api/roles':
+            return self._save_json_endpoint(ROLES_FILE)
+        if self.path == '/api/agents':
+            return self._save_json_endpoint(AGENTS_FILE)
+        if self.path == '/api/project-agents':
+            return self._save_json_endpoint(PROJECT_AGENTS_FILE)
+        if self.path.startswith('/api/convert-office'):
+            return self._convert_office()
+        if self.path == '/api/embedding-config':
+            return self._save_embedding_config()
+        if self.path == '/api/test-embedding':
+            return self._test_embedding()
+        if self.path == '/api/reindex':
+            return self._reindex()
+        if self.path == '/api/data-platforms':
+            return self._save_data_platforms()
+        if self.path == '/api/data-proxy':
+            return self._data_proxy()
+        if self.path == '/api/data-test':
+            return self._test_data_connection()
+        if self.path.startswith('/api/chat'):
+            return self._engine_chat()
+        if self.path == '/api/agent':
+            return self._agent_loop()
+        if self.path == '/api/mcp-discover':
+            return self._mcp_discover()
+        if self.path == '/api/workbuddy':
+            return self._proxy_workbuddy()
+        self.send_error(404)
+
+    def _find_libreoffice(self):
+        """Find the LibreOffice executable."""
+        for path in [
+            '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+            'soffice', 'libreoffice',
+        ]:
+            if shutil.which(path):
+                return path
+        return None
+
+    def _save_embedding_config(self):
+        """保存 embedding 配置（provider/key/base_url/model）。"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            return self._serve_json({'error': '无效的 JSON'}, 400)
+        # 合并到现有配置（避免丢字段）
+        cfg = _get_embedding_config()
+        cfg.update({k: v for k, v in data.items() if k in
+                    ('provider', 'api_key', 'base_url', 'model', 'dimensions')})
+        _save_json(EMBEDDING_FILE, cfg)
+        return self._serve_json({'ok': True})
+
+    def _test_embedding(self):
+        """测试 embedding 配置是否可用：发一条测试文本，返回维度。"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            data = {}
+        test_text = data.get('text', '你好，这是一条测试文本。')
+        try:
+            vecs = _embed_texts([test_text])
+            if vecs and vecs[0]:
+                dim = len(vecs[0])
+                # 顺便把测出来的维度存进配置
+                cfg = _get_embedding_config()
+                if cfg.get('dimensions') != dim:
+                    cfg['dimensions'] = dim
+                    _save_json(EMBEDDING_FILE, cfg)
+                return self._serve_json({'ok': True, 'dimensions': dim})
+            return self._serve_json({'error': 'embedding 返回空向量'}, 400)
+        except Exception as e:
+            return self._serve_json({'error': str(e)}, 400)
+
+    def _reindex(self):
+        """触发某工作区重建索引，SSE 流式推送进度。
+        请求体：{workspace: '/path/to/folder'}"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            data = {}
+        ws = data.get('workspace', '')
+        wpath = os.path.expanduser(ws) if ws else None
+        if not wpath or not os.path.isdir(wpath):
+            return self._serve_json({'error': f'工作区路径无效：{ws}'}, 400)
+
+        # 开始 SSE 流
+        self._start_sse()
+
+        def progress_cb(done, total, msg):
+            self._serve_sse('progress', {'done': done, 'total': total, 'message': msg})
+
+        try:
+            self._serve_sse('start', {'workspace': wpath})
+            indexed, skipped, removed = _index_workspace(wpath, progress_cb)
+            self._serve_sse('done', {
+                'indexed': indexed, 'skipped': skipped, 'removed': removed
+            })
+        except Exception as e:
+            self._serve_sse('error', {'message': str(e)})
+
+    def _save_data_platforms(self):
+        """保存数据平台配置。"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            return self._serve_json({'error': '无效的 JSON'}, 400)
+        # 只允许更新 provider 下的字段
+        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
+        # 支持多操作：save_source / delete_source / set_active
+        op = data.get('op', 'save_source')
+        if op == 'save_source':
+            sid = data.get('source_id', '')
+            sd = data.get('source', {})
+            if not sid or not sd.get('name'):
+                return self._serve_json({'error': 'source_id 和 name 必填'}, 400)
+            cfg.setdefault('sources', {})[sid] = {
+                'name': sd.get('name', sid),
+                'base_url': sd.get('base_url', ''),
+                'api_key': sd.get('api_key', ''),
+                'auth_header': sd.get('auth_header', 'Authorization'),
+                'auth_prefix': sd.get('auth_prefix', 'Bearer ')
+            }
+        elif op == 'delete_source':
+            sid = data.get('source_id', '')
+            if sid in cfg.get('sources', {}):
+                del cfg['sources'][sid]
+                if cfg.get('active') == sid:
+                    keys = list(cfg['sources'].keys())
+                    cfg['active'] = keys[0] if keys else ''
+        elif op == 'set_active':
+            sid = data.get('source_id', '')
+            if sid not in cfg.get('sources', {}):
+                return self._serve_json({'error': f'数据源 {sid} 不存在'}, 400)
+            cfg['active'] = sid
+        elif op == 'set_channels':
+            # 允许自定义 channels 列表
+            if 'channels' in data:
+                cfg['channels'] = data['channels']
+        _save_json(DATA_PLATFORMS_FILE, cfg)
+        return self._serve_json({'ok': True})
+
+    def _test_data_connection(self):
+        """测试活跃数据源连接。"""
+        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
+        sources = cfg.get('sources', {})
+        active_id = cfg.get('active', '')
+        source = sources.get(active_id) if active_id else (list(sources.values())[0] if sources else None)
+        if not source:
+            return self._serve_json({'error': '没有可用的数据源'}, 400)
+        if not source.get('api_key'):
+            return self._serve_json({'error': f'数据源「{source.get("name")}」未配置 API Key'}, 400)
+        try:
+            result = _call_data_api(cfg, 'hot_search', None, {})
+            return self._serve_json({'ok': True, 'source': source.get('name'), 'sample_count': len(result) if isinstance(result, list) else 0})
+        except Exception as e:
+            return self._serve_json({'error': f'连接失败：{e}'}, 400)
+
+    def _data_proxy(self):
+        """通用数据代理：接收 {channel, action, params}，转发到配置的数据源。"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            req_data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            return self._serve_json({'error': '无效的 JSON'}, 400)
+        channel = req_data.get('channel', '')
+        action = req_data.get('action', 'search_note')
+        params = req_data.get('params', {})
+        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
+        try:
+            result = _call_data_api(cfg, action, channel, params)
+            return self._serve_json({'ok': True, 'data': result})
+        except Exception as e:
+            return self._serve_json({'error': str(e)}, 400)
+
+    def _convert_office(self):
+        """Convert uploaded Office file to PDF using LibreOffice."""
+        # Read binary body
+        length = int(self.headers.get('Content-Length', 0))
+        if length == 0:
+            self._serve_json({'error': '未收到文件'}, 400)
+            return
+
+        # Extract filename from query string
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        filename = qs.get('name', ['document'])[0]
+        if not filename:
+            self._serve_json({'error': '缺少文件名'}, 400)
+            return
+
+        body = self.rfile.read(length)
+
+        # Check LibreOffice availability
+        lo_path = self._find_libreoffice()
+        if not lo_path:
+            self._serve_json({
+                'error': '未找到 LibreOffice。请运行：brew install --cask libreoffice'
+            }, 500)
+            return
+
+        # Save to temp directory and convert
+        tmpdir = tempfile.mkdtemp(prefix='partnerfm-')
+        try:
+            input_path = os.path.join(tmpdir, filename)
+            with open(input_path, 'wb') as f:
+                f.write(body)
+
+            # Run LibreOffice headless conversion
+            result = subprocess.run(
+                [lo_path, '--headless', '--convert-to', 'pdf', '--outdir', tmpdir, input_path],
+                capture_output=True, text=True, timeout=60
+            )
+
+            # Find the output PDF
+            base = os.path.splitext(filename)[0]
+            pdf_path = os.path.join(tmpdir, base + '.pdf')
+            if not os.path.exists(pdf_path):
+                # Try glob
+                pdfs = [f for f in os.listdir(tmpdir) if f.endswith('.pdf')]
+                if pdfs:
+                    pdf_path = os.path.join(tmpdir, pdfs[0])
+                else:
+                    self._serve_json({
+                        'error': f'转换失败：{result.stderr.strip() or "未生成 PDF 文件"}'
+                    }, 500)
+                    return
+
+            with open(pdf_path, 'rb') as f:
+                pdf_data = f.read()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/pdf')
+            self.send_header('Content-Length', str(len(pdf_data)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(pdf_data)
+
+        except subprocess.TimeoutExpired:
+            self._serve_json({'error': '转换超时，文件可能过大'}, 500)
+        except Exception as e:
+            self._serve_json({'error': f'转换出错：{e}'}, 500)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # ========== 通用引擎路由 ==========
+
+    def _serve_engines(self):
+        """GET /api/engines — 返回引擎配置（脱敏后）"""
+        data = _load_json(ENGINES_FILE, {"engines": {}, "ui": {"sections": []}})
+        safe = json.loads(json.dumps(data))
+
+        # 兼容旧 models.json 中的 key
+        old_models = _load_json(MODELS_FILE, {"models": []})
+        old_providers = old_models.get('providers', {})
+
+        for eid, cfg in safe.get('engines', {}).items():
+            key = cfg.get('api_key', '')
+            # 解析环境变量占位符
+            if key.startswith('${') and key.endswith('}'):
+                env_var = key[2:-1]
+                resolved = os.environ.get(env_var, '')
+                if not resolved and eid in old_providers:
+                    resolved = old_providers[eid].get('key', '')
+                if resolved:
+                    cfg['api_key'] = resolved[:4] + '***' + resolved[-4:] if len(resolved) > 8 else '***'
+                else:
+                    cfg['api_key'] = ''
+            elif key and len(key) > 8:
+                cfg['api_key'] = key[:4] + '***' + key[-4:]
+        return self._serve_json(safe)
+
+    def _engine_chat(self):
+        """统一引擎聊天入口 — POST /api/chat?engine=xxx
+
+        根据 engine 参数选择处理器：
+        - rest    → 代理到 LLM API（DeepSeek/OpenAI/Claude）
+        - sidecar → 转发到侧车进程（WorkBuddy）
+        - cli     → 子进程调用（Hermes/Claude Code）
+        - agent   → 内置 Agent 循环（PartnerFM Agent）
+        无 engine 参数 → 兼容旧模式（从 body 读取 api_key/base_url）
+        """
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        engine_id = qs.get('engine', [None])[0]
+
+        # 读取请求体
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            req_data = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        # 加载引擎配置
+        engines_data = _load_json(ENGINES_FILE, {"engines": {}, "ui": {"sections": []}})
+        engines = engines_data.get('engines', {})
+
+        # 无 engine 参数 → 兼容旧模式（直接 REST 代理）
+        if not engine_id:
+            # 尝试从请求体判断
+            if req_data.get('api_key') and req_data.get('base_url'):
+                return self._handle_rest_engine(req_data, None)
+            # 没有足够信息 → 用默认引擎
+            engine_id = 'deepseek'
+
+        engine_cfg = engines.get(engine_id)
+        if not engine_cfg:
+            return self._serve_sse_error(f'未知引擎: {engine_id}')
+
+        etype = engine_cfg.get('type', 'rest')
+
+        # 解析环境变量占位符
+        if 'api_key' in engine_cfg and engine_cfg['api_key'].startswith('${') and engine_cfg['api_key'].endswith('}'):
+            env_var = engine_cfg['api_key'][2:-1]
+            engine_cfg['api_key'] = os.environ.get(env_var, '')
+
+        if etype == 'rest':
+            return self._handle_rest_engine(req_data, engine_cfg)
+        elif etype == 'sidecar':
+            return self._handle_sidecar_engine(req_data, engine_cfg)
+        elif etype == 'cli':
+            return self._handle_cli_engine(req_data, engine_cfg)
+        elif etype == 'agent':
+            return self._handle_agent_engine(req_data, engine_cfg)
+        else:
+            return self._serve_sse_error(f'不支持的引擎类型: {etype}')
+
+    def _handle_rest_engine(self, req_data, engine_cfg):
+        """REST API 引擎 — 代理到 /chat/completions，流式转发 + 用量记录"""
+        if engine_cfg:
+            api_key = engine_cfg.get('api_key', '')
+            base_url = engine_cfg.get('base_url', '')
+            if not api_key:
+                return self._serve_sse_error(f'引擎 "{engine_cfg.get("name")}" 未配置 API Key')
+        else:
+            api_key = req_data.get('api_key', '') or DEEPSEEK_API_KEY
+            base_url = req_data.get('base_url', '')
+
+        model = req_data.get('model', '')
+        messages = req_data.get('messages', [])
+
+        if not api_key or not base_url:
+            return self._serve_sse_error('缺少 API Key 或 Base URL')
+
+        url = base_url.rstrip('/') + '/chat/completions'
+        payload = json.dumps({
+            'model': model,
+            'messages': messages,
+            'stream': True
+        }).encode('utf-8')
+
+        if engine_cfg:
+            additional_headers = engine_cfg.get('headers', {})
+        else:
+            additional_headers = {}
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+            **additional_headers
+        }
+
+        agent_name = engine_cfg.get('name', 'REST') if engine_cfg else 'REST'
+        agent_id = engine_cfg.get('name', 'rest').lower() if engine_cfg else 'rest'
+        usage = None
+
+        req = urllib.request.Request(url, data=payload, headers=headers, method='POST')
+
+        try:
+            self._start_sse()
+
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                while True:
+                    raw = resp.readline()
+                    if not raw:
+                        break
+                    line = raw.decode('utf-8', errors='replace').strip()
+                    if line.startswith('data: ') and not line.startswith('data: [DONE]'):
+                        try:
+                            chunk = json.loads(line[6:])
+                            u = chunk.get('usage')
+                            if u and u.get('total_tokens'):
+                                usage = u
+                        except json.JSONDecodeError:
+                            pass
+                    self.wfile.write(raw)
+                    self.wfile.flush()
+
+            if usage:
+                _record_usage(model, agent_id, agent_name,
+                             usage.get('prompt_tokens', 0),
+                             usage.get('completion_tokens', 0))
+                _append_log({
+                    'type': 'chat',
+                    'engineId': agent_id,
+                    'engineName': agent_name,
+                    'model': model,
+                    'status': 'success',
+                    'promptTokens': usage.get('prompt_tokens', 0),
+                    'completionTokens': usage.get('completion_tokens', 0),
+                    'totalTokens': usage.get('total_tokens', 0),
+                })
+        except urllib.error.HTTPError as e:
+            _append_log({
+                'type': 'chat',
+                'engineId': agent_id,
+                'engineName': agent_name,
+                'model': model,
+                'status': 'error',
+                'error': self._format_api_error(e),
+            })
+            self._serve_sse_error(self._format_api_error(e))
+        except Exception as e:
+            _append_log({
+                'type': 'chat',
+                'engineId': agent_id,
+                'engineName': agent_name,
+                'model': model,
+                'status': 'error',
+                'error': str(e),
+            })
+            self._serve_sse_error(str(e))
+
+    def _handle_sidecar_engine(self, req_data, engine_cfg):
+        """侧车引擎 — 转发请求到侧车进程 HTTP 端点"""
+        sidecar_url = engine_cfg.get('url', '')
+        if not sidecar_url:
+            return self._serve_sse_error('侧车引擎未配置 url')
+
+        # 构造转发请求体
+        forward_body = json.dumps({
+            'prompt': req_data.get('prompt', ''),
+            'model': req_data.get('model', ''),
+            'messages': req_data.get('messages', []),
+            'options': req_data.get('options', {})
+        }).encode('utf-8')
+
+        req = urllib.request.Request(
+            sidecar_url,
+            data=forward_body,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+
+        try:
+            self._start_sse()
+
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                while True:
+                    chunk = resp.readline()
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except urllib.error.URLError:
+            self._serve_sse_error(f'侧车服务不可用 ({sidecar_url}), 请先启动对应服务')
+        except Exception as e:
+            self._serve_sse_error(f'侧车引擎错误: {e}')
+
+    def _handle_cli_engine(self, req_data, engine_cfg):
+        """CLI 引擎 — 通过子进程调用命令行工具"""
+        command = engine_cfg.get('command', '')
+        args = engine_cfg.get('args', [])
+        prompt = req_data.get('prompt', '') or ''.join(
+            msg.get('content', '') for msg in req_data.get('messages', [])
+            if msg.get('role') == 'user'
+        )
+
+        if not command:
+            return self._serve_sse_error('CLI 引擎未配置 command')
+        if not prompt:
+            return self._serve_sse_error('缺少 prompt')
+
+        cmd = [command] + args + [prompt]
+        timeout = engine_cfg.get('timeout', 120)
+
+        try:
+            self._start_sse()
+
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # 逐行读取输出并作为 SSE 事件发送
+            for line in iter(proc.stdout.readline, ''):
+                if not line:
+                    break
+                self._serve_sse('text', {'text': line})
+
+            proc.wait(timeout=timeout)
+
+            if proc.returncode != 0:
+                stderr = proc.stderr.read()
+                self._serve_sse('error', {
+                    'code': 'CLI_ERROR',
+                    'message': stderr or f'退出码: {proc.returncode}'
+                })
+
+            self._serve_sse('done', {})
+
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            self._serve_sse_error(f'CLI 引擎超时 ({timeout}s)')
+        except FileNotFoundError:
+            self._serve_sse_error(f'未找到命令: {command}')
+        except Exception as e:
+            self._serve_sse_error(f'CLI 引擎错误: {e}')
+
+    def _handle_agent_engine(self, req_data, engine_cfg):
+        """Agent 引擎 — 委托给内置的 _agent_loop"""
+        # 复用现有的 agent 循环逻辑
+        return self._agent_loop()
+
+    # ========== 原有聊天代理方法 ==========
+
+    def _proxy_chat(self):
+        """Proxy LLM chat request — always streaming via SSE."""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            req_data = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        api_key = req_data.get('api_key', '') or DEEPSEEK_API_KEY
+        base_url = req_data.get('base_url', '')
+        model = req_data.get('model', '')
+        messages = req_data.get('messages', [])
+
+        if not api_key or not base_url:
+            self._serve_json({'error': '请先配置模型和 API Key，或在终端设置 DEEPSEEK_API_KEY 环境变量'}, 400)
+            return
+
+        url = base_url.rstrip('/') + '/chat/completions'
+        payload = json.dumps({
+            'model': model,
+            'messages': messages,
+            'stream': True
+        }).encode('utf-8')
+
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            },
+            method='POST'
+        )
+
+        usage = None
+
+        try:
+            self._start_sse()
+
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                while True:
+                    raw = resp.readline()
+                    if not raw:
+                        break
+                    line = raw.decode('utf-8', errors='replace').strip()
+                    if line.startswith('data: ') and not line.startswith('data: [DONE]'):
+                        try:
+                            chunk = json.loads(line[6:])
+                            u = chunk.get('usage')
+                            if u and u.get('total_tokens'):
+                                usage = u
+                        except json.JSONDecodeError:
+                            pass
+                    self.wfile.write(raw)
+                    self.wfile.flush()
+
+            if usage:
+                _record_usage(model, 'rest', 'REST',
+                             usage.get('prompt_tokens', 0),
+                             usage.get('completion_tokens', 0))
+                _append_log({
+                    'type': 'chat',
+                    'engineId': 'rest',
+                    'engineName': 'REST',
+                    'model': model,
+                    'status': 'success',
+                    'promptTokens': usage.get('prompt_tokens', 0),
+                    'completionTokens': usage.get('completion_tokens', 0),
+                    'totalTokens': usage.get('total_tokens', 0),
+                })
+        except urllib.error.HTTPError as e:
+            _append_log({
+                'type': 'chat',
+                'engineId': 'rest',
+                'engineName': 'REST',
+                'model': model,
+                'status': 'error',
+                'error': self._format_api_error(e),
+            })
+            self._serve_sse_error(self._format_api_error(e))
+        except Exception as e:
+            _append_log({
+                'type': 'chat',
+                'engineId': 'rest',
+                'engineName': 'REST',
+                'model': model,
+                'status': 'error',
+                'error': str(e),
+            })
+            self._serve_sse_error(str(e))
+
+    def _save_json_endpoint(self, path):
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+        _save_json(path, data)
+        self._serve_json({'ok': True})
+
+    def _serve_static(self, filename, content_type='text/html'):
+        """Serve a static file from the package static/ directory."""
+        filepath = os.path.join(STATIC_DIR, filename)
+        try:
+            with open(filepath, 'rb') as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', f'{content_type}; charset=utf-8')
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self.send_error(404, 'File not found')
+
+    def _serve_json(self, data, status=200):
+        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _proxy_workbuddy(self):
+        """将请求转发到 WorkBuddy 侧车进程 (Node.js SSE)."""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+
+        SIDECAR_URL = 'http://127.0.0.1:9876/api/chat'
+        SIDECAR_TIMEOUT = 300
+
+        req = urllib.request.Request(
+            SIDECAR_URL,
+            data=body,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+
+        try:
+            self._start_sse()
+
+            with urllib.request.urlopen(req, timeout=SIDECAR_TIMEOUT) as resp:
+                while True:
+                    chunk = resp.readline()
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except Exception:
+            err_msg = 'event: error\ndata: {"code":"SIDECAR_DOWN","message":"WorkBuddy 侧车未启动，请先在 workbuddy-sidecar 目录下运行 node server.js"}\n\n'
+            self.wfile.write(err_msg.encode('utf-8'))
+            self.wfile.flush()
+
+    def _serve_sse(self, event_type, data):
+        """Send an SSE event."""
+        payload = f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+        self.wfile.write(payload.encode('utf-8'))
+        self.wfile.flush()
+
+    def _serve_sse_error(self, message):
+        """Send an SSE error event, ensuring headers are sent first."""
+        if not getattr(self, '_sse_headers_sent', False):
+            self._start_sse()
+        self._serve_sse('error', {'message': message})
+
+    def _mcp_discover(self):
+        """Discover tools from enabled MCP servers."""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            req = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            self.send_error(400, 'Invalid JSON')
+            return
+
+        mcp_data = _load_json(MCP_FILE, {'items': DEFAULT_MCP, 'enabled': list(DEFAULT_MCP.keys())})
+        items = mcp_data.get('items', {})
+        enabled_ids = mcp_data.get('enabled', [])
+        target_id = req.get('server_id')
+
+        # If specific server requested
+        if target_id and target_id in enabled_ids:
+            cfg = items.get(target_id, {})
+            cmd = cfg.get('command', '')
+            if not cmd:
+                self._serve_json({'results': {target_id: {'error': '没有配置启动命令'}}})
+                return
+            client = _get_mcp_client(target_id, cmd)
+            result = client.list_tools()
+            self._serve_json({'results': {target_id: result}})
+            return
+
+        # Discover all enabled
+        enabled_servers = {sid: items[sid] for sid in enabled_ids if sid in items}
+        results = _discover_mcp_tools(enabled_servers)
+        self._serve_json({'results': results})
+
+    def _start_sse(self):
+        """Send SSE headers (idempotent)."""
+        if getattr(self, '_sse_headers_sent', False):
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream')
+        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self._sse_headers_sent = True
+        self.close_connection = True
+
+    # --- Web tools ---
+    def _web_search(self, query):
+        """Search the web using DuckDuckGo HTML (no API key)."""
+        try:
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                raw = resp.read().decode('utf-8', errors='replace')
+
+            # Extract search results
+            results = []
+            # Match DuckDuckGo result snippets
+            snippets = re.findall(
+                r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?'
+                r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
+                raw, re.DOTALL
+            )
+            for href, title, snippet in snippets[:10]:
+                title_clean = html.unescape(re.sub(r'<[^>]+>', '', title)).strip()
+                snippet_clean = html.unescape(re.sub(r'<[^>]+>', '', snippet)).strip()
+                if title_clean:
+                    results.append({
+                        'title': title_clean,
+                        'url': html.unescape(href),
+                        'snippet': snippet_clean[:300]
+                    })
+
+            if not results:
+                # Fallback: try simpler extraction
+                links = re.findall(
+                    r'<a[^>]*class="result__url"[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
+                    raw, re.DOTALL
+                )
+                for href, display in links[:10]:
+                    results.append({
+                        'title': html.unescape(re.sub(r'<[^>]+>', '', display)).strip() or href,
+                        'url': html.unescape(href),
+                        'snippet': ''
+                    })
+
+            return results if results else []
+        except Exception as e:
+            return [{'error': str(e)}]
+
+    def _web_fetch(self, url):
+        """Fetch a web page and extract its text content."""
+        try:
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+                              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                content_type = resp.headers.get('Content-Type', '')
+                raw = resp.read()
+
+                # Try to decode
+                charset = 'utf-8'
+                ct_match = re.search(r'charset=([^\s;]+)', content_type)
+                if ct_match:
+                    charset = ct_match.group(1)
+                try:
+                    text = raw.decode(charset, errors='replace')
+                except Exception:
+                    text = raw.decode('utf-8', errors='replace')
+
+                # Strip HTML tags for text extraction
+                text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+                text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+                text = re.sub(r'<[^>]+>', ' ', text)
+                text = re.sub(r'\s+', ' ', text)
+                text = html.unescape(text).strip()
+
+                if len(text) > 8000:
+                    text = text[:8000] + '\n\n... (内容过长，已截断)'
+                return text
+        except Exception as e:
+            return f'获取网页失败：{e}'
+
+    def _agent_loop(self):
+        """Agent loop with SSE streaming: think → tool_call → tool_result → response."""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            req = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON")
+            return
+
+        api_key = req.get('api_key', '') or DEEPSEEK_API_KEY
+        base_url = req.get('base_url', '')
+        model = req.get('model', '')
+        messages = req.get('messages', [])
+        workspace = req.get('workspace', '')
+        max_iter = req.get('max_iterations', 10)
+
+        if not api_key or not base_url:
+            self._serve_json({'error': '请先配置模型和 API Key，或在终端设置 DEEPSEEK_API_KEY 环境变量'}, 400)
+            return
+        wpath = os.path.expanduser(workspace) if workspace else None
+        if wpath and not os.path.isdir(wpath):
+            self._serve_json({'error': f'工作区路径不存在：{wpath}'}, 400)
+            return
+
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_dir",
+                    "description": "列出指定目录下的所有文件和子目录。path 为空或 '.' 时列出工作区根目录。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "相对于工作区根目录的路径，如 '.' 或 '产出' 或 'sop'"}
+                        },
+                        "required": ["path"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "读取指定文件的内容。默认从头读最多 8000 字符；文件更长时用 offset（起始字符）和 limit（读取字符数，默认 8000）分段读。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "相对于工作区根目录的文件路径，如 'sop/01-素材入库.md'"},
+                            "offset": {"type": "integer", "description": "起始字符位置（默认 0），用于分段读取长文件"},
+                            "limit": {"type": "integer", "description": "本次读取的字符数（默认 8000）"}
+                        },
+                        "required": ["path"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "新建或覆盖写入一个文件。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "相对于工作区根目录的文件路径，如 '产出/新文件.md'"},
+                            "content": {"type": "string", "description": "要写入的完整文件内容"}
+                        },
+                        "required": ["path", "content"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_files",
+                    "description": "在工作区中递归搜索包含指定关键词的文件（大小写不敏感）。返回匹配文件路径 + 每个文件的匹配行号和上下文片段（最多 50 个文件，每文件最多 5 段）。支持文件名匹配。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "要搜索的关键词（会做大小写不敏感的子串匹配）"},
+                            "path": {"type": "string", "description": "搜索的起始子目录，留空则搜索整个工作区"}
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "在互联网上搜索信息。当你需要查找最新信息、事实、新闻或不确定的知识时使用。返回标题、URL 和摘要。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "搜索关键词，如 'Python 3.13 新特性'"}
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_fetch",
+                    "description": "抓取指定网页的文本内容。当需要阅读某篇文章或文档的完整内容时使用。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string", "description": "要抓取的网页 URL"}
+                        },
+                        "required": ["url"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "semantic_search",
+                    "description": "在工作区中进行语义搜索（向量检索）。当用户按「意思」而非「关键词」查找时使用，如「我去年写的关于定价的内容」「那次线上事故的复盘」。返回最相关的文件路径 + 匹配片段 + 相似度分数。需要工作区已建立向量索引。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "用自然语言描述想找的内容，如「产品定价方案」「用户增长分析」"},
+                            "top_k": {"type": "integer", "description": "返回结果数，默认 8"}
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "file_stats",
+                    "description": "统计工作区的文件情况：总数、总大小、按扩展名/类型分布、按一级子文件夹分布。当用户问「这个文件夹多大」「有多少个 md 文件」「代码文件占多少」时使用。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "统计的子目录，留空统计整个工作区"}
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "recent_files",
+                    "description": "按修改时间列出工作区最近变动的文件。当用户问「最近改过哪些文件」「上周的文档」「今天更新的内容」时使用。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "limit": {"type": "integer", "description": "返回文件数，默认 20"},
+                            "days": {"type": "integer", "description": "只返回最近 N 天内修改的文件，留空不限"},
+                            "path": {"type": "string", "description": "限定子目录，留空为整个工作区"}
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "invoke_agent",
+                    "description": "调用另一个注册的智能体来完成任务。当前 Agent 会暂停等待子 Agent 返回结果后再继续。可用智能体：code-assistant（代码助手）、writing-assistant（文案助手）、drawing-assistant（图表助手）、data-analyst（数据分析师）、default-general（全能助手）。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "agentId": {
+                                "type": "string",
+                                "description": "目标智能体的 ID，如 'code-assistant'、'writing-assistant'、'drawing-assistant'、'data-analyst'、'default-general'"
+                            },
+                            "task": {
+                                "type": "string",
+                                "description": "要交给该智能体完成的具体任务描述，越详细越好。如'写一个冒泡排序算法，保存为 bubble-sort.py'"
+                            },
+                            "context": {
+                                "type": "string",
+                                "description": "传给子 Agent 的上下文信息（可选），如之前对话的部分结果、文件路径等"
+                            },
+                            "outputFile": {
+                                "type": "string",
+                                "description": "期望的输出文件名（可选），如 'sorting-algorithm.md'"
+                            }
+                        },
+                        "required": ["agentId", "task"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "run_shell",
+                    "description": "在工作区执行 shell 命令并返回输出。支持运行脚本、编译代码、安装依赖、调用 CLI 工具（如 claude、hermes、cursor agent 等）。危险命令会被自动拦截。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {"type": "string", "description": "要执行的 shell 命令，如 'python3 script.py'、'git status'、'npm test'、'claude -p \"重构代码\"'"},
+                            "timeout": {"type": "integer", "description": "超时秒数，默认 60，最长 300"}
+                        },
+                        "required": ["command"]
+                    }
+                }
+            }
+        ]
+
+        # --- Discover MCP tools from enabled servers (must run before building tools list & _exec_tool) ---
+        mcp_tools_map = {}  # full_name -> {server_id, tool_name, schema}
+        mcp_data = _load_json(MCP_FILE, {'items': DEFAULT_MCP, 'enabled': list(DEFAULT_MCP.keys())})
+        mcp_items = mcp_data.get('items', {})
+        mcp_enabled = mcp_data.get('enabled', [])
+        if mcp_enabled:
+            enabled_mcp = {sid: mcp_items[sid] for sid in mcp_enabled if sid in mcp_items}
+            mcp_discover_results = _discover_mcp_tools(enabled_mcp)
+            for sid, res in mcp_discover_results.items():
+                if 'error' in res:
+                    continue
+                for tool in res.get('tools', []):
+                    tname = tool.get('name', '')
+                    full_name = f'mcp_{sid}_{tname}'
+                    mcp_tools_map[full_name] = {
+                        'server_id': sid,
+                        'tool_name': tname,
+                        'schema': tool
+                    }
+
+        # Add MCP tools to the tools list
+        for full_name, info in mcp_tools_map.items():
+            schema = info['schema']
+            tools.append({
+                'type': 'function',
+                'function': {
+                    'name': full_name,
+                    'description': schema.get('description', f'MCP tool: {info["tool_name"]}'),
+                    'parameters': schema.get('inputSchema', {'type': 'object', 'properties': {}})
+                }
+            })
+
+        def _resolve(p):
+            if not wpath:
+                raise ValueError('未设置工作区。请在聊天中添加文件或文件夹到对话上下文。')
+            full = os.path.normpath(os.path.join(wpath, p))
+            if not full.startswith(os.path.normpath(wpath)):
+                raise ValueError(f'不允许访问工作区之外的路径：{p}')
+            return full
+
+        def _exec_tool(call):
+            name = call['function']['name']
+            try:
+                args = json.loads(call['function'].get('arguments', '{}'))
+            except json.JSONDecodeError:
+                return f'参数解析失败：{call["function"].get("arguments", "")}'
+
+            try:
+                if name == 'list_dir':
+                    p = _resolve(args.get('path', '.'))
+                    if not os.path.isdir(p):
+                        return f'目录不存在：{args.get("path", ".")}'
+                    items = []
+                    for entry in sorted(os.listdir(p)):
+                        if entry.startswith('.'):
+                            continue
+                        ep = os.path.join(p, entry)
+                        tag = '📁' if os.path.isdir(ep) else '📄'
+                        size = ''
+                        if os.path.isfile(ep):
+                            s = os.path.getsize(ep)
+                            size = f' ({s}B)' if s < 1024 else f' ({s//1024}KB)'
+                        items.append(f'{tag} {entry}{size}')
+                    return '\n'.join(items) if items else '(空目录)'
+
+                elif name == 'read_file':
+                    p = _resolve(args['path'])
+                    if not os.path.isfile(p):
+                        return f'文件不存在：{args["path"]}'
+                    with open(p, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+                    total = len(content)
+                    offset = max(0, int(args.get('offset', 0)))
+                    limit = int(args.get('limit', 8000)) or 8000
+                    if offset >= total:
+                        return f'offset {offset} 已超过文件长度 {total}。文件已读完。'
+                    chunk = content[offset:offset + limit]
+                    if offset + limit < total:
+                        chunk += f'\n\n... (已读 {offset + limit}/{total} 字符，继续读请设 offset={offset + limit})'
+                    elif offset > 0:
+                        chunk = f'(从字符 {offset} 开始读，共 {total} 字符)\n\n' + chunk
+                    return chunk
+
+                elif name == 'write_file':
+                    p = _resolve(args['path'])
+                    parent = os.path.dirname(p)
+                    if not os.path.isdir(parent):
+                        return f'目录不存在。请先用 list_dir 确认父目录'
+                    os.makedirs(parent, exist_ok=True)
+                    with open(p, 'w', encoding='utf-8') as f:
+                        f.write(args['content'])
+                    return f'文件已写入：{args["path"]}'
+
+                elif name == 'search_files':
+                    query = args['query'].lower()
+                    if not query:
+                        return '请提供搜索关键词'
+                    start = _resolve(args.get('path', '.'))
+                    if not os.path.isdir(start):
+                        start = wpath
+                    # 文件名也参与匹配
+                    fname_match = args.get('match_filename', True)
+                    # 只索引文本类文件（二进制文件跳过，避免乱码）
+                    text_exts = TEXT_EXTS
+                    results = []
+                    for root, dirs, files in os.walk(start):
+                        dirs[:] = [d for d in dirs if not d.startswith('.')]
+                        for fname in files:
+                            if fname.startswith('.'):
+                                continue
+                            ext = os.path.splitext(fname)[1].lower()
+                            if ext and ext not in text_exts:
+                                continue
+                            fp = os.path.join(root, fname)
+                            try:
+                                with open(fp, 'r', encoding='utf-8', errors='replace') as f:
+                                    content = f.read()
+                            except Exception:
+                                continue
+                            rel = os.path.relpath(fp, wpath)
+                            hit = False
+                            snippet_lines = []
+                            if fname_match and query in fname.lower():
+                                hit = True
+                                snippet_lines.append(f'  [文件名匹配]')
+                            # 内容匹配：逐行找，保留匹配点 ±2 行上下文
+                            content_lower = content.lower()
+                            if query in content_lower:
+                                hit = True
+                                lines = content.split('\n')
+                                matched_idx = set()
+                                for i, line in enumerate(lines):
+                                    if query in line.lower():
+                                        for j in range(max(0, i-1), min(len(lines), i+2)):
+                                            matched_idx.add(j)
+                                # 合并连续行，最多取前 5 段，每段 ≤300 字
+                                sorted_idx = sorted(matched_idx)
+                                seg_count = 0
+                                i = 0
+                                while i < len(sorted_idx) and seg_count < 5:
+                                    seg = []
+                                    start_i = sorted_idx[i]
+                                    while i < len(sorted_idx) - 1 and sorted_idx[i+1] == sorted_idx[i] + 1:
+                                        seg.append(lines[sorted_idx[i]])
+                                        i += 1
+                                    seg.append(lines[sorted_idx[i]])
+                                    i += 1
+                                    seg_text = '\n'.join(seg)
+                                    if len(seg_text) > 300:
+                                        seg_text = seg_text[:300] + '…'
+                                    snippet_lines.append(f'  L{start_i+1}: {seg_text}')
+                                    seg_count += 1
+                            if hit:
+                                results.append(f'📄 {rel}\n' + '\n'.join(snippet_lines[:6]))
+                    if not results:
+                        return f'未找到包含 "{args["query"]}" 的文件'
+                    return f'共 {len(results)} 个文件匹配：\n\n' + '\n\n'.join(results[:50])
+
+                elif name == 'web_search':
+                    results = self._web_search(args['query'])
+                    if not results:
+                        return f'未找到与 "{args["query"]}" 相关的搜索结果'
+                    if isinstance(results[0], dict) and 'error' in results[0]:
+                        return f'搜索失败：{results[0]["error"]}'
+                    lines = []
+                    for i, r in enumerate(results):
+                        lines.append(f'{i+1}. [{r["title"]}]({r["url"]})')
+                        if r.get('snippet'):
+                            lines.append(f'   {r["snippet"]}')
+                    return '\n'.join(lines)
+
+                elif name == 'web_fetch':
+                    return self._web_fetch(args['url'])
+
+                elif name == 'semantic_search':
+                    if not wpath:
+                        return '未设置工作区，无法搜索'
+                    results = _search_semantic(wpath, args['query'], int(args.get('top_k', 8)))
+                    if not results:
+                        return f'未找到与「{args["query"]}」语义相关的内容'
+                    if len(results) == 1 and 'error' in results[0]:
+                        return results[0]['error']
+                    lines = [f'语义搜索「{args["query"]}」找到 {len(results)} 个相关文件：\n']
+                    for i, r in enumerate(results):
+                        lines.append(f'{i+1}. 📄 {r["file_path"]}（相似度 {r["score"]}）')
+                        lines.append(f'   {r["snippet"]}')
+                    return '\n'.join(lines)
+
+                elif name == 'file_stats':
+                    start = _resolve(args.get('path', '.'))
+                    if not os.path.isdir(start):
+                        start = wpath
+                    total_files = 0
+                    total_size = 0
+                    by_ext = {}
+                    by_dir = {}
+                    for dirpath, dirs, files in os.walk(start):
+                        dirs[:] = [d for d in dirs if not d.startswith('.')]
+                        for fname in files:
+                            if fname.startswith('.'):
+                                continue
+                            fp = os.path.join(dirpath, fname)
+                            try:
+                                sz = os.path.getsize(fp)
+                            except OSError:
+                                continue
+                            total_files += 1
+                            total_size += sz
+                            ext = os.path.splitext(fname)[1].lower() or '(无扩展名)'
+                            by_ext[ext] = by_ext.get(ext, 0) + 1
+                            # 一级子目录
+                            rel = os.path.relpath(dirpath, start)
+                            top_dir = rel.split(os.sep)[0] if rel != '.' else '(根目录)'
+                            by_dir[top_dir] = by_dir.get(top_dir, 0) + 1
+                    def fmt_size(n):
+                        for u in ['B','KB','MB','GB']:
+                            if n < 1024: return f'{n:.1f}{u}'
+                            n /= 1024
+                        return f'{n:.1f}TB'
+                    lines = [f'工作区统计（{args.get("path", ".")}）：',
+                             f'- 文件总数：{total_files}',
+                             f'- 总大小：{fmt_size(total_size)}',
+                             f'- 按类型（前 10）：']
+                    for ext, cnt in sorted(by_ext.items(), key=lambda x: -x[1])[:10]:
+                        lines.append(f'    {ext}: {cnt}')
+                    lines.append('- 按一级目录（前 10）：')
+                    for d, cnt in sorted(by_dir.items(), key=lambda x: -x[1])[:10]:
+                        lines.append(f'    {d}: {cnt}')
+                    return '\n'.join(lines)
+
+                elif name == 'recent_files':
+                    start = _resolve(args.get('path', '.'))
+                    if not os.path.isdir(start):
+                        start = wpath
+                    limit = int(args.get('limit', 20))
+                    days = args.get('days')
+                    cutoff = (time.time() - days * 86400) if days else 0
+                    files_info = []
+                    for dirpath, dirs, files in os.walk(start):
+                        dirs[:] = [d for d in dirs if not d.startswith('.')]
+                        for fname in files:
+                            if fname.startswith('.'):
+                                continue
+                            fp = os.path.join(dirpath, fname)
+                            try:
+                                mt = os.path.getmtime(fp)
+                            except OSError:
+                                continue
+                            if mt < cutoff:
+                                continue
+                            files_info.append((mt, os.path.relpath(fp, wpath)))
+                    files_info.sort(reverse=True)
+                    files_info = files_info[:limit]
+                    if not files_info:
+                        return '没有符合条件的文件'
+                    lines = [f'最近修改的 {len(files_info)} 个文件：']
+                    for mt, rel in files_info:
+                        t = time.strftime('%Y-%m-%d %H:%M', time.localtime(mt))
+                        lines.append(f'  {t}  📄 {rel}')
+                    return '\n'.join(lines)
+
+                elif name == 'invoke_agent':
+                    agent_id = args.get('agentId', '')
+                    task = args.get('task', '')
+                    context = args.get('context', '')
+                    output_file = args.get('outputFile', '')
+
+                    if not agent_id or not task:
+                        return 'invoke_agent 需要 agentId 和 task 参数'
+
+                    agent_data = _load_json(AGENTS_FILE, DEFAULT_AGENTS)
+                    agent = next((a for a in agent_data.get('agents', []) if a['id'] == agent_id), None)
+                    if not agent:
+                        return f'Agent 不存在：{agent_id}。可用的 Agent ID：{", ".join(a["id"] for a in agent_data.get("agents", []))}'
+                    if agent.get('status') != 'active':
+                        return f'Agent「{agent["name"]}」当前状态为 {agent.get("status")}，无法调用'
+
+                    # Check nesting depth
+                    nesting = int(args.get('_nesting_depth', 0))
+                    if nesting > 3:
+                        return f'调用链过深（当前 {nesting} 层），拒绝递归调用以避免无限循环'
+
+                    # Build sub-agent messages
+                    sub_messages = []
+                    sys_prompt = agent.get('systemPrompt', '你是一个智能助手。')
+                    if wpath:
+                        sys_prompt += f'\n\n当前工作区根目录：{wpath}。所有文件路径相对于此目录。'
+                    sub_messages.append({'role': 'system', 'content': sys_prompt})
+
+                    user_content = task
+                    if context:
+                        user_content = f'上下文信息：\n{context}\n\n---\n任务：\n{task}'
+                    if output_file:
+                        user_content += f'\n\n请将最终结果写入文件：{output_file}'
+                    sub_messages.append({'role': 'user', 'content': user_content})
+
+                    # Filter tools by agent whitelist
+                    agent_tool_names = set(agent.get('tools', []))
+                    agent_tool_names.discard('invoke_agent')
+                    sub_tools = [t for t in tools if t['function']['name'] in agent_tool_names]
+
+                    sub_model = agent.get('modelId', model)
+                    sub_max_iter = min(agent.get('maxIterations', 10), 20)
+                    sub_temp = agent.get('temperature', 0.7)
+
+                    # Track written files
+                    written_files = []
+                    sub_start = time.time()
+                    sub_tools_used = []
+
+                    self._serve_sse('invoke_agent_start', {
+                        'agentId': agent_id,
+                        'agentName': agent['name'],
+                        'task': task[:300]
+                    })
+
+                    sub_iteration = 0
+                    final_response = ''
+
+                    try:
+                        while sub_iteration < sub_max_iter:
+                            sub_iteration += 1
+                            self._serve_sse('invoke_agent_iteration', {
+                                'agentId': agent_id,
+                                'iteration': sub_iteration,
+                                'maxIter': sub_max_iter
+                            })
+
+                            url = base_url.rstrip('/') + '/chat/completions'
+                            payload = json.dumps({
+                                'model': sub_model,
+                                'messages': sub_messages,
+                                'tools': sub_tools,
+                                'tool_choice': 'auto',
+                                'temperature': sub_temp
+                            }).encode('utf-8')
+
+                            r = urllib.request.Request(url, data=payload, headers={
+                                'Content-Type': 'application/json',
+                                'Authorization': f'Bearer {api_key}'
+                            }, method='POST')
+
+                            try:
+                                with urllib.request.urlopen(r, timeout=120) as resp:
+                                    result = json.loads(resp.read().decode('utf-8'))
+
+                                # 记录子 Agent 的 token 用量
+                                sub_usage = result.get('usage', {})
+                                if sub_usage:
+                                    _record_usage(sub_model, agent_id, agent['name'],
+                                                  sub_usage.get('prompt_tokens', 0),
+                                                  sub_usage.get('completion_tokens', 0))
+
+                            except urllib.error.HTTPError as e:
+                                err_body = e.read().decode('utf-8', errors='ignore')[:500]
+                                self._serve_sse('invoke_agent_error', {
+                                    'agentId': agent_id,
+                                    'error': f'API 错误 {e.code}: {err_body}'
+                                })
+                                _append_log({
+                                    'type': 'agent_end',
+                                    'agentId': agent_id,
+                                    'agentName': agent['name'],
+                                    'modelId': sub_model,
+                                    'task': task[:200],
+                                    'duration': round(time.time() - sub_start, 1),
+                                    'status': 'error',
+                                    'error': f'HTTP {e.code}',
+                                })
+                                return f'子 Agent「{agent["name"]}」API 调用失败 (HTTP {e.code})'
+
+                            choice = result.get('choices', [{}])[0]
+                            msg = choice.get('message', {})
+                            finish = choice.get('finish_reason', '')
+
+                            if finish == 'tool_calls' or msg.get('tool_calls'):
+                                tool_calls = msg.get('tool_calls', [])
+                                tool_results_local = []
+                                for tc in tool_calls:
+                                    fn_name = tc['function']['name']
+                                    fn_args = tc['function'].get('arguments', '{}')
+                                    self._serve_sse('invoke_agent_tool_call', {
+                                        'agentId': agent_id,
+                                        'tool': fn_name,
+                                        'arguments': fn_args
+                                    })
+                                    rt = _exec_tool(tc)
+                                    tool_results_local.append(rt)
+                                    if fn_name not in sub_tools_used:
+                                        sub_tools_used.append(fn_name)
+
+                                    if fn_name == 'write_file':
+                                        try:
+                                            wf_args = json.loads(fn_args)
+                                            wf_path = _resolve(wf_args['path'])
+                                            if wf_path not in written_files:
+                                                written_files.append(wf_path)
+                                        except Exception:
+                                            pass
+
+                                    self._serve_sse('invoke_agent_tool_result', {
+                                        'agentId': agent_id,
+                                        'tool': fn_name,
+                                        'result': rt[:3000]
+                                    })
+
+                                sub_messages.append({
+                                    'role': 'assistant',
+                                    'content': msg.get('content') or msg.get('reasoning_content', ''),
+                                    'tool_calls': tool_calls
+                                })
+                                for tc, rt in zip(tool_calls, tool_results_local):
+                                    sub_messages.append({
+                                        'role': 'tool',
+                                        'tool_call_id': tc['id'],
+                                        'content': rt
+                                    })
+                                continue
+
+                            # Final text response
+                            final_response = msg.get('content') or msg.get('reasoning_content', '')
+
+                            # Auto-save code blocks if outputFile specified
+                            if output_file and final_response and wpath:
+                                allowed_dir = agent.get('allowedOutputDir', '产出/通用')
+                                ts = time.strftime('%Y%m%d_%H%M')
+                                out_name = output_file if output_file else f'{ts}_output.md'
+                                out_path = os.path.join(allowed_dir, out_name)
+                                try:
+                                    full_out = _resolve(out_path)
+                                    os.makedirs(os.path.dirname(full_out), exist_ok=True)
+                                    with open(full_out, 'w', encoding='utf-8') as f:
+                                        f.write(final_response)
+                                    if full_out not in written_files:
+                                        written_files.append(full_out)
+                                except Exception:
+                                    pass
+
+                            break
+
+                        # Send artifact events for all written files
+                        for wf in written_files:
+                            rel = os.path.relpath(wf, wpath) if wpath else wf
+                            self._serve_sse('artifact', {
+                                'path': rel,
+                                'type': os.path.splitext(wf)[1].lstrip('.'),
+                                'agentId': agent_id
+                            })
+
+                    except Exception as e:
+                        self._serve_sse('invoke_agent_error', {
+                            'agentId': agent_id,
+                            'error': str(e)
+                        })
+                        _append_log({
+                            'type': 'agent_end',
+                            'agentId': agent_id,
+                            'agentName': agent['name'],
+                            'modelId': sub_model,
+                            'task': task[:200],
+                            'duration': round(time.time() - sub_start, 1),
+                            'status': 'error',
+                            'error': str(e)[:200],
+                        })
+                        return f'子 Agent「{agent["name"]}」执行出错：{e}'
+
+                    # Return structured result
+                    rel_artifacts = [os.path.relpath(wf, wpath) if wpath else wf for wf in written_files]
+                    self._serve_sse('invoke_agent_response', {
+                        'agentId': agent_id,
+                        'agentName': agent['name'],
+                        'response': final_response[:2000],
+                        'artifacts': rel_artifacts
+                    })
+
+                    _append_log({
+                        'type': 'agent_end',
+                        'agentId': agent_id,
+                        'agentName': agent['name'],
+                        'modelId': sub_model,
+                        'workspace': wpath or '',
+                        'task': task[:200],
+                        'iterations': sub_iteration,
+                        'toolsUsed': sub_tools_used,
+                        'artifacts': rel_artifacts,
+                        'duration': round(time.time() - sub_start, 1),
+                        'status': 'success',
+                    })
+
+                    result_lines = [f'[子 Agent「{agent["name"]}」执行完成]\n']
+                    result_lines.append(final_response[:4000] if final_response else '(无文本输出)')
+                    if written_files:
+                        result_lines.append('\n---\n产物文件：')
+                        for wf in written_files:
+                            rel = os.path.relpath(wf, wpath) if wpath else wf
+                            result_lines.append(f'- {rel}')
+                    return '\n'.join(result_lines)
+
+                elif name == 'run_shell':
+                    command = args['command']
+                    timeout = min(int(args.get('timeout', 60)), 300)
+
+                    # Safety sandbox
+                    DANGEROUS_PATTERNS = [
+                        'rm -rf /', 'rm -rf ~', 'rm -rf .',
+                        'mkfs.', 'dd if=', ':(){ :|:& };:',
+                        'chmod 777 /', '> /dev/sda',
+                        'wget -O - | sh', 'curl | sh', 'curl | bash',
+                    ]
+                    cmd_lower = command.strip().lower()
+                    for pat in DANGEROUS_PATTERNS:
+                        if pat in cmd_lower:
+                            return f'❌ 安全拦截：命令包含危险模式 "{pat}"'
+                    if command.strip().startswith('sudo '):
+                        return '❌ 安全拦截：sudo 命令不被允许'
+
+                    cwd = wpath if wpath else os.path.expanduser('~')
+
+                    try:
+                        result = subprocess.run(
+                            command,
+                            shell=True,
+                            cwd=cwd,
+                            capture_output=True,
+                            timeout=timeout,
+                            env={**os.environ}
+                        )
+                    except subprocess.TimeoutExpired:
+                        return f'⏱ 命令超时（{timeout} 秒）：{command[:200]}'
+                    except FileNotFoundError:
+                        return f'❌ 命令未找到：{command.split()[0]}'
+
+                    stdout = result.stdout.decode('utf-8', errors='replace')[:4000]
+                    stderr = result.stderr.decode('utf-8', errors='replace')[:2000]
+
+                    parts = []
+                    if stdout:
+                        parts.append(f'STDOUT:\n{stdout}')
+                    if stderr:
+                        parts.append(f'STDERR:\n{stderr}')
+                    parts.append(f'\n退出码：{result.returncode}')
+                    out = '\n'.join(parts)
+                    if len(out) > 5000:
+                        out = out[:5000] + '\n... (输出已截断)'
+                    return out if out.strip() else '(无输出)'
+
+                else:
+                    # Check if it's an MCP tool
+                    if name.startswith('mcp_') and name in mcp_tools_map:
+                        info = mcp_tools_map[name]
+                        result = _call_mcp_tool(info['server_id'], info['tool_name'], args)
+                        return result
+                    return f'未知工具：{name}'
+            except ValueError as e:
+                return str(e)
+            except Exception as e:
+                return f'执行出错：{e}'
+
+        # --- SSE Agent loop ---
+        self._start_sse()
+
+        log_start = time.time()
+        log_tools_used = []
+        log_artifacts = []
+        _append_log({
+            'type': 'agent_start',
+            'agentId': 'main',
+            'agentName': '主 Agent',
+            'modelId': model,
+            'workspace': wpath or '',
+            'userMsg': next((m.get('content', '') for m in messages if m['role'] == 'user'), '')[:200],
+        })
+
+        iteration = 0
+        system_msg = next((m for m in messages if m['role'] == 'system'), None)
+        if not system_msg:
+            base_prompt = '你是一个智能助手，是用户的主 Agent。你可以调用其他专业智能体来协作完成任务。'
+            if wpath:
+                base_prompt += f'当前工作区根目录：{wpath}。所有文件路径相对于此目录（"."=根目录）。当用户说"在XX文件夹里面"操作而XX正好是根目录的名字时，直接在根目录操作，不要创建同名子目录。根目录下的文件和文件夹是用户的直接内容，像管理自己的文件夹一样管理它们。你可以使用工具读取、写入、搜索文件。操作前先用 list_dir(".")看一眼。你还可以使用 web_search 搜索互联网获取最新信息，使用 web_fetch 抓取网页内容你可以使用 invoke_agent 调用其他智能体（如代码助手、文案助手、图表助手、数据分析师）来完成专项任务。你可以使用 run_shell 执行 shell 命令——运行脚本、git 操作、npm/pip 包管理、乃至调用 Claude Code 等 CLI 工具。请用中文回复。'
+            else:
+                base_prompt += '你可以根据对话中的文件内容回答用户问题。你可以使用 web_search 搜索互联网获取最新信息，使用 web_fetch 抓取网页内容。你可以使用 invoke_agent 调用其他智能体（如代码助手、文案助手、图表助手、数据分析师）来完成专项任务。你可以使用 run_shell 执行 shell 命令。请用中文回复。'
+            system_msg = {'role': 'system', 'content': base_prompt}
+            messages.insert(0, system_msg)
+
+        try:
+            while iteration < max_iter:
+                iteration += 1
+                self._serve_sse('iteration', {'iteration': iteration, 'max_iter': max_iter})
+
+                url = base_url.rstrip('/') + '/chat/completions'
+                payload = json.dumps({
+                    'model': model,
+                    'messages': messages,
+                    'tools': tools,
+                    'tool_choice': 'auto'
+                }).encode('utf-8')
+
+                r = urllib.request.Request(url, data=payload, headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {api_key}'
+                }, method='POST')
+
+                with urllib.request.urlopen(r, timeout=120) as resp:
+                    result = json.loads(resp.read().decode('utf-8'))
+
+                # 记录 token 用量
+                usage = result.get('usage', {})
+                if usage:
+                    _record_usage(model, 'main', '主 Agent',
+                                  usage.get('prompt_tokens', 0),
+                                  usage.get('completion_tokens', 0))
+
+                choice = result.get('choices', [{}])[0]
+                msg = choice.get('message', {})
+                finish = choice.get('finish_reason', '')
+
+                if finish == 'tool_calls' or msg.get('tool_calls'):
+                    tool_calls = msg.get('tool_calls', [])
+                    # 执行每个工具调用一次，结果同时用于 SSE 展示和 messages 历史
+                    tool_results = []
+                    for tc in tool_calls:
+                        fn_name = tc['function']['name']
+                        fn_args = tc['function'].get('arguments', '{}')
+                        self._serve_sse('tool_call', {
+                            'id': tc['id'],
+                            'name': fn_name,
+                            'arguments': fn_args
+                        })
+                        result_text = _exec_tool(tc)
+                        tool_results.append(result_text)
+                        if fn_name not in log_tools_used:
+                            log_tools_used.append(fn_name)
+                        if fn_name == 'write_file':
+                            try:
+                                wf_args = json.loads(fn_args)
+                                log_artifacts.append(wf_args.get('path', ''))
+                            except: pass
+                        self._serve_sse('tool_result', {
+                            'id': tc['id'],
+                            'name': fn_name,
+                            'result': result_text[:5000]
+                        })
+                    # Add to message history（复用已执行的结果，不重复执行）
+                    messages.append({
+                        'role': 'assistant',
+                        'content': msg.get('content') or msg.get('reasoning_content', ''),
+                        'tool_calls': tool_calls
+                    })
+                    for tc, result_text in zip(tool_calls, tool_results):
+                        messages.append({
+                            'role': 'tool',
+                            'tool_call_id': tc['id'],
+                            'content': result_text
+                        })
+                    continue
+
+                # Final text response
+                final_content = msg.get('content') or msg.get('reasoning_content', '')
+                self._serve_sse('response', {
+                    'content': final_content,
+                    'iterations': iteration,
+                    'model': model
+                })
+                self._serve_sse('done', {})
+                _append_log({
+                    'type': 'agent_end',
+                    'agentId': 'main',
+                    'agentName': '主 Agent',
+                    'modelId': model,
+                    'iterations': iteration,
+                    'toolsUsed': log_tools_used,
+                    'artifacts': log_artifacts,
+                    'duration': round(time.time() - log_start, 1),
+                    'status': 'success',
+                })
+                return
+
+            # Max iterations reached
+            self._serve_sse('response', {
+                'content': '达到最大执行轮次，但任务可能未完成。请检查结果或简化指令。',
+                'iterations': iteration,
+                'model': model
+            })
+            self._serve_sse('done', {})
+            _append_log({
+                'type': 'agent_end',
+                'agentId': 'main',
+                'agentName': '主 Agent',
+                'modelId': model,
+                'iterations': iteration,
+                'toolsUsed': log_tools_used,
+                'artifacts': log_artifacts,
+                'duration': round(time.time() - log_start, 1),
+                'status': 'max_iter',
+            })
+
+        except urllib.error.HTTPError as e:
+            self._serve_sse('error', {'message': self._format_api_error(e)})
+            _append_log({
+                'type': 'agent_end',
+                'agentId': 'main',
+                'agentName': '主 Agent',
+                'modelId': model,
+                'duration': round(time.time() - log_start, 1),
+                'status': 'error',
+                'error': self._format_api_error(e)[:200],
+            })
+        except Exception as e:
+            self._serve_sse('error', {'message': str(e)})
+            _append_log({
+                'type': 'agent_end',
+                'agentId': 'main',
+                'agentName': '主 Agent',
+                'modelId': model,
+                'duration': round(time.time() - log_start, 1),
+                'status': 'error',
+                'error': str(e)[:200],
+            })
+
+    def _format_api_error(self, e):
+        """Parse HTTPError response and return a user-friendly message."""
+        error_body = e.read().decode('utf-8', errors='ignore')
+        try:
+            err_json = json.loads(error_body)
+            api_msg = err_json.get('error', {}).get('message', '')
+            if api_msg:
+                if 'insufficient' in api_msg.lower() or 'balance' in api_msg.lower() or e.code == 402:
+                    return '❌ 账户余额不足 (402)\n\n你的 API 密钥余额已耗尽，请前往对应平台充值，或在「模型」模块中添加其他 API 提供商。'
+                return f'API 错误 {e.code}: {api_msg}'
+        except Exception:
+            pass
+        return f'API 错误 {e.code}: {error_body[:300]}'
+
+    def log_message(self, format, *args):
+        pass
+
+
+def run_server(host='127.0.0.1', port=8765, data_dir=None, open_browser=False):
+    """启动 PartnerFM 服务器（程序化调用入口）。"""
+    global DATA_DIR, STATE_FILE, MODELS_FILE, ENGINES_FILE, CLI_FILE, MCP_FILE
+    global CHAT_FILE, PROMPTS_FILE, WORKSPACES_FILE, SKILLS_FILE, ROLES_FILE
+    global EMBEDDING_FILE, INDEX_DB, DATA_PLATFORMS_FILE, AGENTS_FILE
+    global PROJECT_AGENTS_FILE, LOG_FILE, USAGE_FILE
+
+    if data_dir:
+        os.environ['PARTNERFM_DATA_DIR'] = data_dir
+        DATA_DIR = _get_data_dir()
+        STATE_FILE = os.path.join(DATA_DIR, '.partnerfm-state.json')
+        MODELS_FILE = os.path.join(DATA_DIR, '.partnerfm-models.json')
+        ENGINES_FILE = os.path.join(DATA_DIR, '.partnerfm-engines.json')
+        CLI_FILE = os.path.join(DATA_DIR, '.partnerfm-cli.json')
+        MCP_FILE = os.path.join(DATA_DIR, '.partnerfm-mcp.json')
+        CHAT_FILE = os.path.join(DATA_DIR, '.partnerfm-chats.json')
+        PROMPTS_FILE = os.path.join(DATA_DIR, '.partnerfm-prompts.json')
+        WORKSPACES_FILE = os.path.join(DATA_DIR, '.partnerfm-workspaces.json')
+        SKILLS_FILE = os.path.join(DATA_DIR, '.partnerfm-skills.json')
+        ROLES_FILE = os.path.join(DATA_DIR, '.partnerfm-roles.json')
+        EMBEDDING_FILE = os.path.join(DATA_DIR, '.partnerfm-embedding.json')
+        INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
+        DATA_PLATFORMS_FILE = os.path.join(DATA_DIR, '.partnerfm-data-platforms.json')
+        AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
+        PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
+        LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
+        USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
+
+    # 确保数据目录存在
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # 初始化默认配置文件
+    _load_json(STATE_FILE, {})
+    _load_json(MODELS_FILE, {"models": []})
+    _load_json(CLI_FILE, {"items": DEFAULT_CLI, "enabled": list(DEFAULT_CLI.keys())})
+    _load_json(MCP_FILE, {"items": DEFAULT_MCP, "enabled": list(DEFAULT_MCP.keys())})
+    _load_json(CHAT_FILE, DEFAULT_CHATS)
+    _load_json(PROMPTS_FILE, DEFAULT_PROMPTS)
+    _load_json(WORKSPACES_FILE, DEFAULT_WORKSPACES)
+    _load_json(SKILLS_FILE, DEFAULT_SKILLS)
+    _load_json(ROLES_FILE, DEFAULT_ROLES)
+    _load_json(AGENTS_FILE, DEFAULT_AGENTS)
+    _load_json(PROJECT_AGENTS_FILE, DEFAULT_PROJECT_AGENTS)
+    _load_json(LOG_FILE, {'logs': []})
+    _load_json(USAGE_FILE, {'usage': []})
+
+    url = f'http://localhost:{port}' if host == '127.0.0.1' else f'http://{host}:{port}'
+    print(f'PartnerFM → {url}')
+
+    if open_browser:
+        import webbrowser
+        webbrowser.open(url)
+
+    HTTPServer.allow_reuse_address = True
+    HTTPServer((host, port), Handler).serve_forever()
+
+
+if __name__ == '__main__':
+    run_server(open_browser=True)
+
