@@ -1125,6 +1125,9 @@ def _scan_local_tokens():
                 opentoken_err = 'opentoken 执行失败: ' + r.stderr[:200]
             else:
                 raw = json.loads(r.stdout)
+                # 适配新旧格式：新版返回 {rows:[...], sessions:[...]}，旧版返回 [...]
+                if isinstance(raw, dict):
+                    raw = raw.get('rows', [])
         except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
             opentoken_err = '解析失败: ' + str(e)[:200]
 
