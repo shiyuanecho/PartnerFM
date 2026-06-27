@@ -60,11 +60,12 @@ SKILLS_FILE = os.path.join(DATA_DIR, '.partnerfm-skills.json')
 ROLES_FILE = os.path.join(DATA_DIR, '.partnerfm-roles.json')
 EMBEDDING_FILE = os.path.join(DATA_DIR, '.partnerfm-embedding.json')
 INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
-DATA_PLATFORMS_FILE = os.path.join(DATA_DIR, '.partnerfm-data-platforms.json')
 AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
 PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
 LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
 USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
+TRACKS_FILE = os.path.join(DATA_DIR, '.partnerfm-tracks.json')
+PROJECTS_FILE = os.path.join(DATA_DIR, '.partnerfm-projects.json')
 HOST = '127.0.0.1'
 PORT = 8765
 
@@ -408,84 +409,30 @@ DEFAULT_PROMPTS = {
 
 DEFAULT_WORKSPACES = {"workspaces": {}}
 
-# Default Skills registry — pluggable agent capabilities
+# Default Skills registry — installable SKILL.md workflow guides
 DEFAULT_SKILLS = {
     "skills": [
-        # ===== 外部应用集成 =====
-        {"id":"workbuddy","name":"WorkBuddy","icon":"🤖","category":"外部应用",
-         "description":"WorkBuddy AI 工作台集成，掌握文件操作、MCP 连接器、自动化调度、多模型配置等能力",
-         "prompt":"你是 WorkBuddy 专家。WorkBuddy 是一个 AI 智能体工作台，支持：\n- 文件系统操作（读/写/搜索/列表）\n- MCP 连接器（飞书、GitHub、腾讯文档等 30+ 连接器）\n- 自动化调度（Cron 定时任务）\n- 多模型支持（DeepSeek、OpenAI、Claude 等）\n- 专家系统（100+ 领域专家）\n- 技能市场（Skills Marketplace）\n- 记忆系统（Cloud Memory / User Memory / Workspace Memory）\n回答问题时请基于 WorkBuddy 的知识体系，给出最佳实践。",
-         "enabled":False},
-        {"id":"coze","name":"Coze 扣子","icon":"🧩","category":"外部应用",
-         "description":"字节跳动 Coze AI Bot 开发平台，Bot 创建、插件开发、工作流设计、知识库配置",
-         "prompt":"你是 Coze（扣子）平台专家。Coze 是字节跳动的 AI Bot 开发平台，核心概念：\n- Bot：可发布的 AI 对话机器人\n- Plugin：扩展 Bot 能力的插件\n- Workflow：可视化工作流编排\n- Knowledge：RAG 知识库\n- Variable：对话变量和记忆\n- 发布渠道：飞书、微信、Web 等\nAPI 风格：RESTful，使用 Personal Access Token 认证。回答时给出具体的 Bot 配置方案和最佳实践。",
-         "enabled":False},
-        {"id":"feishu","name":"飞书","icon":"🐦","category":"外部应用",
-         "description":"飞书开放平台集成，文档/表格/消息/审批/日历 API 调用",
-         "prompt":"你是飞书开放平台专家。飞书 API 核心领域：\n- 消息与群组：发送消息、机器人 Webhook\n- 云文档：文档、表格、多维表格 API\n- 通讯录：用户、部门管理\n- 审批：审批实例创建与查询\n- 日历：日程管理\n- 身份验证：OAuth 2.0 / 企业自建应用\nAPI Base URL: https://open.feishu.cn/open-apis\n认证方式：tenant_access_token 或 user_access_token\n所有回复使用 application/json，错误码参考官方文档。请给出可直接使用的 API 调用示例。",
-         "enabled":False},
-        {"id":"wecom","name":"企业微信","icon":"💼","category":"外部应用",
-         "description":"企业微信开发集成，消息推送、应用管理、客户联系、会话存档 API",
-         "prompt":"你是企业微信开发专家。核心 API 模块：\n- 消息推送：应用消息、群机器人 Webhook\n- 通讯录：部门/成员/标签管理\n- 客户联系：外部联系人、客户群\n- 会话存档：消息记录保存\n- 身份验证：OAuth 2.0 授权\nAPI Base: https://qyapi.weixin.qq.com/cgi-bin\nToken 获取：corpid + corpsecret\n请给出安全、合规的企业微信集成方案。",
-         "enabled":False},
-        {"id":"github","name":"GitHub","icon":"🐙","category":"外部应用",
-         "description":"GitHub REST/GraphQL API、Git 工作流、Actions CI/CD、Projects 看板",
-         "prompt":"你是 GitHub 专家。掌握：\n- REST API v3 和 GraphQL API v4\n- Git 工作流（feature branch、GitHub Flow、 trunk-based）\n- Actions CI/CD（YAML 配置、secrets 管理）\n- Projects 看板和 Issues 管理\n- Code Review 最佳实践\n- GitHub CLI (gh) 命令\n请给出具体的 API 示例和工作流建议。",
-         "enabled":False},
-        {"id":"notion","name":"Notion","icon":"📝","category":"外部应用",
-         "description":"Notion API 集成，数据库/页面/块操作，知识库管理",
-         "prompt":"你是 Notion API 专家。核心概念：\n- Block：页面基本组成单位\n- Database：结构化数据表\n- Page：文档页面\n- Property：数据库字段（title/rich_text/number/select/date 等）\nAPI Base: https://api.notion.com/v1\n认证：Bearer Token (Internal Integration)\nNotion-Version Header: 2022-06-28\n请给出 Block 操作的完整示例。",
-         "enabled":False},
-        {"id":"figma","name":"Figma","icon":"🎨","category":"外部应用",
-         "description":"Figma API / Figma Plugin 开发，设计稿解析、组件提取、变量管理",
-         "prompt":"你是 Figma 开发专家。掌握：\n- Figma REST API：文件、评论、团队、项目\n- Figma Plugin API：面板 UI、节点操作\n- Design Tokens / Variables API\n- 组件和样式提取\n- 设计稿导出（PNG/SVG/PDF）\n认证：Personal Access Token\nAPI Base: https://api.figma.com/v1\n请给出可执行的 API 调用代码。",
-         "enabled":False},
-
-        # ===== 创作能力 =====
-        {"id":"drawing","name":"作图能力","icon":"🎯","category":"创作能力",
-         "description":"SVG 图表/架构图/流程图/数据可视化/UI 原型生成",
-         "prompt":"你是专业的数据可视化和图形设计专家。你有以下能力：\n1. SVG 图表：柱状图、折线图、饼图、雷达图、散点图\n2. 架构图：系统架构图、微服务拓扑图、网络架构图\n3. 流程图：业务流程、状态机、决策树\n4. UI 原型：网页/APP 线框图、交互原型\n5. 数据信息图：时间线、比较图、仪表盘\n设计原则：\n- 现代简洁设计风格（圆角、阴影、毛玻璃效果）\n- 中国股票市场红涨绿跌配色\n- 中文标注，清晰易读\n- 输出纯 SVG 代码（可嵌入 HTML），viewBox=\"0 0 680 H\"\n- SVG 中可使用 color-scheme: light dark 适配主题\n每当你需要展示可视化内容时，直接生成 SVG 代码。",
-         "enabled":False},
-        {"id":"coding","name":"写代码","icon":"💻","category":"创作能力",
-         "description":"全栈开发（React/Vue/Node.js/Python），算法实现，架构设计",
-         "prompt":"你是资深全栈软件工程师。技术栈：\n- 前端：React 18+ / Vue 3 / TypeScript / Tailwind CSS / Next.js\n- 后端：Node.js (Express/Fastify) / Python (FastAPI/Flask) / Go\n- 数据库：PostgreSQL / MySQL / MongoDB / Redis\n- 云服务：CloudBase / Vercel / AWS\n编码规范：\n- 使用 TypeScript 类型注解\n- 错误处理完善（try-catch + 用户友好提示）\n- 代码可读性优先，注释只写必要的\n- 给出完整可运行的代码，包括 import 和 package.json\n- 前端代码零框架依赖时也保证结构清晰\n- 中文回复解释逻辑，代码保持英文",
-         "enabled":False},
-        {"id":"writing","name":"写文章","icon":"✍️","category":"创作能力",
-         "description":"长篇内容创作（技术博客/产品文档/商业文案/学术论文）",
-         "prompt":"你是专业的中文写作者和内容创作者。擅长：\n- 技术博客：深入浅出，代码示例丰富\n- 产品文档：结构清晰，用户导向\n- 商业文案：营销页、产品介绍、白皮书\n- 学术论文：严谨逻辑，规范引用\n写作风格：\n- 开门见山，金字塔结构\n- 数据支撑观点\n- 段落简短，善用小标题\n- 使用适当的图表和列表\n- 结尾给出行动建议或下一步\n根据用户需求调整语气（正式/轻松/技术/通俗）。",
-         "enabled":False},
-        {"id":"translation","name":"翻译能力","icon":"🌍","category":"创作能力",
-         "description":"中英日韩多语言翻译，技术文档/法律合同/文学作品的精准翻译",
-         "prompt":"你是专业的多语言翻译专家。支持：中 ↔ 英 ↔ 日 ↔ 韩。\n翻译原则：\n- 技术文档：保留代码/API/变量名原文，术语统一\n- 法律合同：严谨准确，不增不减不改变原意\n- 文学作品：传达风格和意境，适度归化\n- UI 文案：简洁有力，符合平台规范\n输出格式：\n1. 先给出翻译结果\n2. 必要时加注释说明术语选择和翻译考量\n3. 发现原文歧义时主动提醒",
-         "enabled":False},
-
-        # ===== 分析能力 =====
-        {"id":"code-review","name":"代码审查","icon":"🔍","category":"分析能力",
-         "description":"全面代码审查：安全漏洞、性能瓶颈、代码异味、架构评估、最佳实践建议",
-         "prompt":"你是严格的代码审查员（Senior Code Reviewer）。审查维度：\n\n**安全**\n- SQL注入/XSS/CSRF/路径穿越\n- 密钥硬编码/敏感信息泄露\n- 输入验证和权限校验\n\n**性能**\n- N+1查询/不必要重渲染\n- 内存泄漏/资源未释放\n- 算法复杂度优化空间\n\n**质量**\n- 命名规范/代码重复\n- 错误处理完整性\n- 类型安全/边界检查\n\n**架构**\n- 单一职责/开闭原则\n- 模块耦合度\n- 可测试性和可维护性\n\n输出格式：分严重程度（🔴严重 🟡警告 🔵建议）列出问题，每个问题给出具体位置、解释和改进代码。",
-         "enabled":False},
-        {"id":"data-analysis","name":"数据分析","icon":"📊","category":"分析能力",
-         "description":"数据洞察、统计分析、趋势预测、报表生成、SQL 查询优化",
-         "prompt":"你是资深数据分析师。技能：\n- SQL：复杂查询、窗口函数、性能优化\n- Python：pandas/numpy/matplotlib 数据分析\n- 统计：描述性统计/假设检验/回归分析\n- 可视化：选择合适的图表类型\n- 商业分析：漏斗分析/用户分群/留存分析/归因分析\n分析流程：\n1. 理解数据结构和业务背景\n2. 清洗和预处理\n3. 探索性分析（EDA）\n4. 深度分析并提出洞察\n5. 给出可执行的建议\n回复时用数据说话，给出具体的数字和百分比。",
-         "enabled":False},
-        {"id":"doc-summary","name":"文档总结","icon":"📋","category":"分析能力",
-         "description":"长文档快速摘要、关键信息提取、会议纪要、多文档对比分析",
-         "prompt":"你是高效的文档分析专家。擅长：\n- 长文档快速提取核心观点\n- 结构化摘要（背景→要点→结论→行动项）\n- 会议纪要转写与要点提炼\n- 多文档交叉对比分析\n- 技术文档的术语解释和概念梳理\n\n输出格式：\n```\n## TL;DR\n一句话总结\n\n## 核心要点\n1. ...\n2. ...\n\n## 关键数据\n- ...\n\n## 待办事项\n- [ ] ...\n```\n优先使用中文，专有名词保留原文。",
-         "enabled":False},
-        {"id":"debugging","name":"排错调试","icon":"🐛","category":"分析能力",
-         "description":"Bug 定位与修复、日志分析、性能诊断、异常堆栈解读",
-         "prompt":"你是资深的 Bug 调试专家（Debugger）。调试方法：\n1. 复现：理解触发条件和环境\n2. 隔离：二分法缩小范围\n3. 分析：日志/堆栈/变量状态\n4. 修复：最小改动，考虑边界情况\n5. 验证：回归测试，防止复发\n\n工具技巧：\n- Chrome DevTools：断点、Network、Performance\n- Node.js：--inspect、console.trace\n- Python：pdb、traceback、logging\n- 通用：二分注释法、git bisect\n\n回复时先给出根因分析，再给出修复代码和一个验证步骤。",
-         "enabled":False},
-
-        # ===== 效率工具 =====
-        {"id":"meeting-notes","name":"会议纪要","icon":"🎙️","category":"效率工具",
-         "description":"会议录音转写后的摘要整理，行动项提取，决策记录",
-         "prompt":"你是专业的会议纪要整理助手。格式：\n\n## 会议信息\n- 主题/日期/参会人\n\n## 讨论要点\n1. ...\n2. ...\n\n## 决策\n- ✅ 已决定：...\n- ⏳ 待讨论：...\n\n## 行动项\n| 负责人 | 任务 | 截止日 |\n|--------|------|--------|\n| ... | ... | ... |\n\n## 下次会议\n- 时间/议题\n\n使用中文，简洁有力。",
-         "enabled":False},
-        {"id":"prompt-engineering","name":"提示词工程","icon":"🎛️","category":"效率工具",
-         "description":"Prompt 设计与优化、Few-shot 示例、Chain-of-Thought、结构化输出",
-         "prompt":"你是 Prompt Engineering 专家。掌握技术：\n- Zero-shot / Few-shot / Chain-of-Thought\n- Role Prompting / Instruction Prompting\n- 结构化输出（JSON/Markdown 模板）\n- 负面提示（Negative Prompting）\n- 思维链分解复杂任务\n\n设计原则：\n- 明确角色和任务边界\n- 给出输出格式示例\n- 分步骤引导思考\n- 使用分隔符标记不同部分\n\n根据用户需求设计、优化并测试 prompt。",
-         "enabled":False}
+        {
+            "id": "writing",
+            "name": "写文章",
+            "description": "技术博客、产品文档、商业文案等长篇内容创作工作流",
+            "enabled": True,
+            "content": "## 写文章 Skill\n\n### 触发条件\n当用户需要写技术博客、产品文档、商业文案、长文章时使用。\n\n### 工作流程\n1. **理解需求**：确认文章类型、目标读者、字数范围、风格要求\n2. **列出大纲**：用金字塔结构组织（结论先行 → 分论点 → 支撑细节）\n3. **逐段写作**：\n   - 开头：钩子句吸引注意（数据/反问/故事）\n   - 正文：每段一个核心观点，段落不超过 4 行\n   - 结尾：总结 + 行动建议\n4. **检查清单**：\n   - [ ] 标题有吸引力\n   - [ ] 段落简短易读\n   - [ ] 有数据或案例支撑\n   - [ ] 没有错别字\n\n### 输出格式\n先用一句话概括核心观点，再给出完整文章。技术博客标注代码块语言类型。"
+        },
+        {
+            "id": "code-review",
+            "name": "代码审查",
+            "description": "系统化代码审查工作流：安全、性能、质量、架构四个维度",
+            "enabled": True,
+            "content": "## 代码审查 Skill\n\n### 触发条件\n用户要求审查代码、检查 PR、评估代码质量时使用。\n\n### 审查流程\n按以下顺序逐项检查，不要跳过：\n\n1. **安全排查**\n   - [ ] SQL 注入风险（参数化查询）\n   - [ ] XSS/CSRF 防护\n   - [ ] 密钥/Token 是否硬编码\n   - [ ] 输入验证是否完整\n\n2. **性能分析**\n   - [ ] N+1 查询问题\n   - [ ] 不必要的循环/递归\n   - [ ] 内存泄漏风险\n   - [ ] 大文件/大数据处理方式\n\n3. **代码质量**\n   - [ ] 命名是否清晰（变量/函数/类名）\n   - [ ] 是否重复代码可以抽取\n   - [ ] 错误处理是否完整\n   - [ ] 类型安全/边界检查\n\n4. **架构评估**\n   - [ ] 单一职责原则\n   - [ ] 模块间耦合度\n   - [ ] 可测试性\n   - [ ] 可维护性\n\n### 输出格式\n按严重程度分级：\n- 🔴 严重（必须修改）\n- 🟡 警告（建议修改）\n- 🔵 建议（可选优化）\n\n每个问题标注：文件位置、解释原因、给出改进代码。"
+        },
+        {
+            "id": "debugging",
+            "name": "排错调试",
+            "description": "系统化 Bug 调试工作流：复现→隔离→分析→修复→验证",
+            "enabled": True,
+            "content": "## 排错调试 Skill\n\n### 触发条件\n用户报告 Bug、错误、异常、程序行为不符合预期时使用。\n\n### 调试流程\n严格遵守以下步骤，不跳过任何一步：\n\n1. **复现**\n   - 问清触发条件和环境（浏览器/系统/版本）\n   - 能否稳定复现？概率性还是必然？\n   - 最近改了什么？（git diff / git log）\n\n2. **隔离**\n   - 二分法缩小范围：关掉一半代码/配置，看问题是否存在\n   - 检查是否能单独抽出来跑\n   - git bisect 定位引入 commit\n\n3. **分析**\n   - 看日志/报错信息/堆栈跟踪\n   - 检查变量状态和输入数据\n   - 对比正常情况 vs 异常情况的差异\n\n4. **修复**\n   - 最小改动原则\n   - 考虑边界情况\n   - 加必要注释说明为什么这样改\n\n5. **验证**\n   - 确认修复后问题不再出现\n   - 确认没有引入新问题\n   - 建议加测试防止复发\n\n### 输出格式\n先给根因分析（1-2 句话），再给修复代码，最后给验证步骤。"
+        }
     ]
 }
 
@@ -610,6 +557,104 @@ DEFAULT_AGENTS = {
             "allowedFileTypes": [".md", ".csv", ".json", ".html"],
             "maxIterations": 12,
             "status": "active"
+        },
+        {
+            "id": "copywriter",
+            "name": "文案写手",
+            "description": "小红书/公众号/视频脚本、营销文案、品牌故事",
+            "systemPrompt": "你是专业的中文创作者。擅长小红书图文、公众号长文、短视频脚本、营销文案。\n写作原则：\n- 标题有钩子，前三行决定用户是否读下去\n- 金字塔结构，段落简短\n- 数据+案例支撑观点\n- 结尾给出行动建议或情绪共鸣\n- 根据平台调整语气（小红书活泼、公众号深度、视频口语化）",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.8,
+            "tools": ["write_file", "read_file", "search_files"],
+            "allowedOutputDir": "产出/文案",
+            "allowedFileTypes": [".md", ".html", ".txt"],
+            "maxIterations": 8,
+            "status": "active"
+        },
+        {
+            "id": "translator",
+            "name": "翻译润色",
+            "description": "中英日韩互译，技术文档、商业文书、文学内容",
+            "systemPrompt": "你是专业翻译。技术文档保留代码和术语原文；商业文书准确流畅；文学内容传达风格。先给译文，必要时加注释说明术语选择。发现原文歧义主动提醒。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.3,
+            "tools": ["write_file", "read_file"],
+            "allowedOutputDir": "产出/翻译",
+            "allowedFileTypes": [".md", ".txt"],
+            "maxIterations": 5,
+            "status": "active"
+        },
+        {
+            "id": "tutor",
+            "name": "教程讲师",
+            "description": "把复杂概念拆成教学大纲、逐字稿、PPT 结构",
+            "systemPrompt": "你是专业的教育内容设计师。擅长：\n- 复杂概念的拆解和通俗化\n- 教学大纲设计（目标→知识点→练习→检验）\n- 视频逐字稿（口语化、有节奏感）\n- PPT 结构（一页一个核心观点）\n- 互动问题设计（激发思考）\n\n设计原则：\n- 先给「学完你能做什么」\n- 用类比降低认知门槛\n- 每次只讲一个核心概念\n- 穿插练习巩固记忆\n- 中文授课，专业术语保留英文",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.7,
+            "tools": ["write_file", "read_file", "search_files"],
+            "allowedOutputDir": "产出/教程",
+            "allowedFileTypes": [".md", ".html"],
+            "maxIterations": 10,
+            "status": "active"
+        },
+        {
+            "id": "knowledge-editor",
+            "name": "知识库编辑",
+            "description": "把零散信息整理成结构化文档，加标签、做摘要、建链接",
+            "systemPrompt": "你是知识管理专家。擅长：\n- 把零散笔记整理成结构化文档\n- 自动提取关键词和标签\n- 建立文档间的交叉引用\n- 写摘要和 TL;DR\n- 识别知识缺口\n\n整理原则：\n- 一个文档只讲一个主题\n- 金字塔结构（结论先行）\n- 善用表格和列表\n- 标注信息来源和可信度\n- 结尾给出「延伸阅读」建议",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.5,
+            "tools": ["write_file", "read_file", "search_files", "semantic_search"],
+            "allowedOutputDir": "产出/知识库",
+            "allowedFileTypes": [".md", ".txt", ".json"],
+            "maxIterations": 10,
+            "status": "active"
+        },
+        {
+            "id": "reader",
+            "name": "阅读助理",
+            "description": "读长文/PDF 后做要点提炼、批判性提问、知识关联",
+            "systemPrompt": "你是深度阅读助理。拿到一篇文章后：\n1. 一句话概括核心观点\n2. 提取 3-5 个关键论点\n3. 标注文中的数据和引用\n4. 提出 2-3 个批判性问题\n5. 关联已有知识（如果用户提供了上下文）\n\n输出格式：\n## 一句话总结\n## 核心论点\n## 关键数据\n## 值得追问的问题\n## 延伸思考\n\n中文输出，保持客观。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.5,
+            "tools": ["read_file", "write_file", "search_files"],
+            "allowedOutputDir": "产出/阅读",
+            "allowedFileTypes": [".md", ".txt"],
+            "maxIterations": 8,
+            "status": "active"
+        },
+        {
+            "id": "topic-planner",
+            "name": "选题策划",
+            "description": "根据知识库内容出选题方案，匹配热点，规划内容日历",
+            "systemPrompt": "你是自媒体选题策划师。根据用户提供的领域和素材：\n1. 出 5-10 个选题（含标题和角度）\n2. 标注每个选题的流量潜力（🔴爆款 🟡常规 🔵长尾）\n3. 匹配当前热点话题\n4. 规划发布节奏（内容日历）\n5. 给出每个选题的差异化角度\n\n选题原则：\n- 痛点 + 解决方案 = 高打开率\n- 反常识观点 = 高互动率\n- 实用教程 = 高收藏率\n- 情绪共鸣 = 高转播率",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.8,
+            "tools": ["write_file", "read_file", "web_search"],
+            "allowedOutputDir": "产出/选题",
+            "allowedFileTypes": [".md"],
+            "maxIterations": 8,
+            "status": "active"
+        },
+        {
+            "id": "viral-optimizer",
+            "name": "爆款优化",
+            "description": "改标题、改钩子、改结尾，提升完读率和互动率",
+            "systemPrompt": "你是内容优化师，专攻小红书和公众号爆款。优化维度：\n\n**标题**\n- 数字+痛点+承诺（例：3 个方法，让你的文案转化率翻倍）\n- 反常识+好奇心（例：为什么你越努力，流量越差）\n- 人群标签+场景（例：30 岁转行 AI，我的真实经历）\n\n**开头（钩子）**\n- 前三行决定读者是否继续\n- 痛点共鸣 / 反常识观点 / 悬念提问\n\n**正文**\n- 段落不超过 3 行\n- 每段一个核心信息\n- 用 emoji 和短句增加节奏感\n\n**结尾**\n- 总结核心观点\n- 引导互动（提问/投票/评论区话题）\n\n优化时指出具体问题并给出改写版本。",
+            "modelId": "deepseek-chat",
+            "provider": "deepseek",
+            "temperature": 0.7,
+            "tools": ["read_file", "write_file"],
+            "allowedOutputDir": "产出/优化",
+            "allowedFileTypes": [".md", ".txt"],
+            "maxIterations": 6,
+            "status": "active"
         }
     ],
     "activeAgentId": "default-general"
@@ -661,6 +706,94 @@ def _get_logs(limit=100, agent_id=None, status=None, before=None):
     if before:
         logs = [l for l in logs if l.get('timestamp', '') < before]
     return logs[-limit:]
+
+# ===== 项目追踪 =====
+
+DEFAULT_TRACKS = {'entries': []}
+
+def _load_tracks():
+    return _load_json(TRACKS_FILE, DEFAULT_TRACKS)
+
+def _save_tracks(data):
+    _save_json(TRACKS_FILE, data)
+
+# ===== 项目工作流 =====
+
+DEFAULT_PROJECTS = {'projects': {}}
+
+# 工作流预设模板
+WORKFLOW_TEMPLATES = {
+    'software': ['需求分析', '方案设计', '后端开发', '前端开发', '测试联调'],
+    'content': ['选题', '调研', '写作', '编辑', '发布'],
+    'data': ['采集', '清洗', '建模', '可视化', '报告'],
+}
+
+# workspace 路径关键字 → 项目 ID 映射（日志导入自动推断）
+WORKSPACE_PROJECT_MAP = {
+    'partnerfm': 'partnerfm',
+    'learnchinese': 'learn-chinese',
+    'learn_chinese': 'learn-chinese',
+    '识字': 'shizi-app',
+}
+
+def _load_projects():
+    return _load_json(PROJECTS_FILE, DEFAULT_PROJECTS)
+
+def _save_projects(data):
+    _save_json(PROJECTS_FILE, data)
+
+def _guess_phase(agent_name, available_phases):
+    """根据 agent 名推断所属阶段。"""
+    name_lower = (agent_name or '').lower()
+    if any(w in name_lower for w in ['产品', 'pm', 'product', '需求']):
+        for p in available_phases:
+            if '需求' in p: return p
+        return available_phases[0] if available_phases else ''
+    if any(w in name_lower for w in ['设计', 'design', '方案', '架构']):
+        for p in available_phases:
+            if '设计' in p or '方案' in p: return p
+        return available_phases[1] if len(available_phases) > 1 else ''
+    if any(w in name_lower for w in ['后端', 'backend', 'server', 'api', 'python', 'node', 'go', 'java']):
+        for p in available_phases:
+            if '后端' in p or '开发' in p: return p
+        return available_phases[2] if len(available_phases) > 2 else ''
+    if any(w in name_lower for w in ['前端', 'frontend', 'ui', 'ux', 'html', 'css', 'vue', 'react']):
+        for p in available_phases:
+            if '前端' in p or '界面' in p: return p
+        return available_phases[3] if len(available_phases) > 3 else ''
+    if any(w in name_lower for w in ['测试', 'test', 'qa', '联调', '部署', 'deploy']):
+        for p in available_phases:
+            if '测试' in p or '联调' in p or '发布' in p: return p
+    # fallback
+    return available_phases[0] if available_phases else ''
+
+def _calc_project_summary(proj):
+    """计算项目的汇总统计。"""
+    steps = proj.get('workflow', {}).get('steps', [])
+    total_tokens = sum(s.get('tokens', 0) for s in steps)
+    total_cost = sum(s.get('cost', 0) for s in steps)
+    total_duration = sum(s.get('duration', 0) for s in steps)
+    phases = {}
+    for s in steps:
+        p = s.get('phase', '未分类')
+        if p not in phases:
+            phases[p] = {'steps': 0, 'tokens': 0, 'cost': 0, 'duration': 0, 'done': 0}
+        phases[p]['steps'] += 1
+        phases[p]['tokens'] += s.get('tokens', 0)
+        phases[p]['cost'] += s.get('cost', 0)
+        phases[p]['duration'] += s.get('duration', 0)
+        if s.get('status') == 'done':
+            phases[p]['done'] += 1
+    template = proj.get('workflow', {}).get('template', [])
+    completed_phases = sum(1 for p in template if phases.get(p, {}).get('done', 0) > 0)
+    return {
+        'totalTokens': total_tokens,
+        'totalCost': round(total_cost, 4),
+        'totalDuration': total_duration,
+        'phases': phases,
+        'templateLength': len(template),
+        'completedPhases': completed_phases,
+    }
 
 # ===== Agent 文件变更追踪 =====
 
@@ -979,27 +1112,21 @@ def _scan_local_tokens():
         return _TOKEN_CACHE['data']
 
     exe = _find_opentoken()
-    if not exe:
-        result = {'available': False, 'reason': 'opentoken 未安装',
-                  'installHint': 'curl -fsSL https://scys.com/tokenrank/install.sh | sh'}
-        _TOKEN_CACHE['data'] = result
-        _TOKEN_CACHE['ts'] = now
-        return result
+    raw = None
+    opentoken_err = None
 
-    try:
-        r = subprocess.run([exe, 'preview', '--json'], capture_output=True,
-                           text=True, timeout=60)
-        if r.returncode != 0:
-            result = {'available': False, 'reason': 'opentoken 执行失败: ' + r.stderr[:200]}
-            _TOKEN_CACHE['data'] = result
-            _TOKEN_CACHE['ts'] = now
-            return result
-        raw = json.loads(r.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
-        result = {'available': False, 'reason': '解析失败: ' + str(e)[:200]}
-        _TOKEN_CACHE['data'] = result
-        _TOKEN_CACHE['ts'] = now
-        return result
+    if not exe:
+        opentoken_err = 'opentoken 未安装'
+    else:
+        try:
+            r = subprocess.run([exe, 'preview', '--json'], capture_output=True,
+                               text=True, timeout=60)
+            if r.returncode != 0:
+                opentoken_err = 'opentoken 执行失败: ' + r.stderr[:200]
+            else:
+                raw = json.loads(r.stdout)
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
+            opentoken_err = '解析失败: ' + str(e)[:200]
 
     # 聚合：按 tool 汇总，同时保留 byDate / byModel 明细
     # 真实总消耗 = input + output + cache_read + cache_write（含缓存读取，反映实际 token 吞吐）
@@ -1008,9 +1135,12 @@ def _scan_local_tokens():
                 + rec.get('cache_read', 0) + rec.get('cache_write', 0))
 
     tools_map = {}  # tool_id -> aggregates
+    global_by_model = {}     # model_name -> total tokens (across all tools)
+    global_model_records = {} # model_name -> record count
+    global_model_by_date = {} # model_name -> {date: tokens}
     all_dates = set()
     grand_total = 0
-    for rec in raw:
+    for rec in (raw or []):
         tid = rec.get('tool', 'unknown')
         all_dates.add(rec.get('date', ''))
         grand_total += _real_tokens(rec)
@@ -1037,6 +1167,53 @@ def _scan_local_tokens():
         # byModel
         m = rec.get('model', 'unknown')
         agg['byModel'][m] = agg['byModel'].get(m, 0) + real
+        # global model aggregation
+        global_by_model[m] = global_by_model.get(m, 0) + real
+        global_model_records[m] = global_model_records.get(m, 0) + 1
+        mbyd = global_model_by_date.setdefault(m, {})
+        if d:
+            mbyd[d] = mbyd.get(d, 0) + real
+
+    # ---- Merge PartnerFM own usage into token stats ----
+    pfm_data = _load_json(USAGE_FILE, {'usage': []})
+    pfm_entries = pfm_data.get('usage', [])
+    if pfm_entries:
+        pfm_tool = {
+            'id': 'partnerfm',
+            'name': 'PartnerFM',
+            'total': 0, 'input': 0, 'output': 0,
+            'cacheRead': 0, 'cacheWrite': 0, 'records': 0,
+            'byDate': {}, 'byModel': {},
+        }
+        for e in pfm_entries:
+            tv = e.get('totalTokens', 0)
+            d = e.get('date', '')
+            mdl = e.get('modelId', 'unknown')
+            pfm_tool['total'] += tv
+            pfm_tool['input'] += tv
+            pfm_tool['records'] += 1
+            all_dates.add(d)
+            grand_total += tv
+            if d:
+                pfm_tool['byDate'][d] = pfm_tool['byDate'].get(d, 0) + tv
+            pfm_tool['byModel'][mdl] = pfm_tool['byModel'].get(mdl, 0) + tv
+            # global model aggregation for PartnerFM
+            global_by_model[mdl] = global_by_model.get(mdl, 0) + tv
+            global_model_records[mdl] = global_model_records.get(mdl, 0) + 1
+            mbyd = global_model_by_date.setdefault(mdl, {})
+            if d:
+                mbyd[d] = mbyd.get(d, 0) + tv
+        tools_map['partnerfm'] = pfm_tool
+
+    # ---- Build global model breakdown list ----
+    model_breakdown = []
+    for m, total in sorted(global_by_model.items(), key=lambda x: x[1], reverse=True):
+        model_breakdown.append({
+            'model': m,
+            'total': total,
+            'records': global_model_records.get(m, 0),
+            'byDate': global_model_by_date.get(m, {}),
+        })
 
     tools_list = sorted(tools_map.values(), key=lambda x: x['total'], reverse=True)
     # 每个 tool 的 models 取列表
@@ -1064,8 +1241,9 @@ def _scan_local_tokens():
             by_date_full.append({'date': ds, 'tokens': global_by_date.get(ds, 0)})
             cur += _td(days=1)
 
+    has_data = len(tools_list) > 0
     result = {
-        'available': True,
+        'available': has_data,
         'tools': tools_list,
         'grandTotal': grand_total,
         'dateRange': {'start': dates_sorted[0] if dates_sorted else '',
@@ -1073,7 +1251,11 @@ def _scan_local_tokens():
         'toolCount': len(tools_list),
         'byDate': by_date_full,  # [{date, tokens}] 连续日期序列
         'totalDays': len([x for x in by_date_full if x['tokens'] > 0]),
+        'modelBreakdown': model_breakdown,  # [{model, total, records, byDate}]
     }
+    if not has_data and opentoken_err:
+        result['reason'] = opentoken_err
+        result['installHint'] = 'curl -fsSL https://scys.com/tokenrank/install.sh | sh'
     _TOKEN_CACHE['data'] = result
     _TOKEN_CACHE['ts'] = now
     return result
@@ -1088,82 +1270,6 @@ DEFAULT_EMBEDDING = {
     "model": "text-embedding-3-small",
     "dimensions": 0  # 0=未测过，首次调用后自动填
 }
-
-# ===== 数据监测平台配置（通用适配，支持多数据源） =====
-DEFAULT_DATA_PLATFORMS = {
-    "sources": {
-        "redfox": {
-            "name": "RedFox",
-            "base_url": "https://api.redfox.hk/v1",
-            "api_key": "",
-            "auth_header": "Authorization",
-            "auth_prefix": "Bearer "
-        }
-    },
-    "active": "redfox",
-    "channels": [
-        {"id": "douyin", "name": "抖音"},
-        {"id": "xiaohongshu", "name": "小红书"},
-        {"id": "wechat", "name": "公众号"},
-        {"id": "shipinhao", "name": "视频号"}
-    ]
-}
-
-# action → URL 路径映射（集中管理，换数据源只改这里）
-DATA_ACTION_PATHS = {
-    "search_account": "/search/account",
-    "search_note": "/search/note",
-    "hot_list": "/hot/list",
-    "account_detail": "/account/detail",
-    "hot_search": "/hot/search",
-    "explore": "/explore"
-}
-
-
-def _call_data_api(cfg, action, channel, params):
-    """调用数据平台 API。cfg=配置字典，action=操作名，channel=平台ID，params=参数字典。
-    按 DATA_ACTION_PATHS 拼 URL，带 auth header 转发，返回解析后的 JSON。"""
-    # 取活跃数据源
-    sources = cfg.get('sources', {})
-    active_id = cfg.get('active', '')
-    source = sources.get(active_id, {}) if active_id else (list(sources.values())[0] if sources else {})
-    if not source:
-        raise ValueError('请先添加数据源')
-    base_url = source.get('base_url', '').rstrip('/')
-    api_key = source.get('api_key', '')
-    auth_header = source.get('auth_header', 'Authorization')
-    auth_prefix = source.get('auth_prefix', 'Bearer ')
-
-    if not api_key or not base_url:
-        raise ValueError('请先配置数据平台的 Base URL 和 API Key')
-
-    # 拼接路径：先尝试配置里的 action→path 模板，否则用全局 DATA_ACTION_PATHS
-    path_tmpl = cfg.get('actions', {}).get(action) or DATA_ACTION_PATHS.get(action, '/')
-    path = path_tmpl.replace('{channel}', channel or '')
-    if channel and '{channel}' not in path_tmpl and path_tmpl != '/':
-        path = path_tmpl.rstrip('/') + '/' + channel
-
-    # 拼接 URL + query params
-    url = base_url + path
-    qs_parts = []
-    for k, v in (params or {}).items():
-        if v:
-            qs_parts.append(f'{urllib.parse.quote(str(k))}={urllib.parse.quote(str(v))}')
-    if qs_parts:
-        url += '?' + '&'.join(qs_parts)
-
-    headers = {
-        'Content-Type': 'application/json',
-        auth_header: auth_prefix + api_key
-    }
-    req = urllib.request.Request(url, headers=headers, method='GET')
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode('utf-8')
-        data = json.loads(raw)
-    # RedFox 等平台常用 data.data 包裹，自动解一层
-    if isinstance(data, dict) and 'data' in data and isinstance(data['data'], (list, dict)):
-        return data['data']
-    return data
 
 
 # embedding 内存缓存：text -> vector（避免同一 query 重复算）
@@ -1613,9 +1719,13 @@ class Handler(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+    def do_DELETE(self):
+        # SimpleHTTPRequestHandler 不支持 DELETE，委托给 do_GET 处理
+        self.do_GET()
 
     def do_GET(self):
         # 根路径和 index.html 从包内 static/ 目录提供
@@ -1670,7 +1780,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json(_load_json(AGENTS_FILE, DEFAULT_AGENTS))
         if self.path == '/api/project-agents':
             return self._serve_json(_load_json(PROJECT_AGENTS_FILE, DEFAULT_PROJECT_AGENTS))
-        if self.path == '/api/logs':
+        if self.path.startswith('/api/logs'):
             from urllib.parse import urlparse, parse_qs
             qs = parse_qs(urlparse(self.path).query)
             limit = int(qs.get('limit', [100])[0])
@@ -1742,6 +1852,16 @@ class Handler(SimpleHTTPRequestHandler):
             })
         if self.path == '/api/embedding-config':
             return self._serve_json(_get_embedding_config())
+        # 项目追踪
+        if '/api/tracks' in self.path:
+            if '/api/tracks/' in self.path and self.command == 'DELETE':
+                return self._handle_tracks_delete()
+            return self._handle_tracks_get()
+        # 项目工作流
+        if '/api/projects' in self.path:
+            if '/api/projects/' in self.path and self.command == 'DELETE':
+                return self._handle_project_delete()
+            return self._handle_projects_get()
         # index-status 支持 ?workspace=xxx
         if self.path.startswith('/api/index-status'):
             from urllib.parse import urlparse, parse_qs
@@ -1773,15 +1893,6 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json({'status': status, 'enabled': enabled_ids})
         if self.path == '/api/health':
             return self._serve_json({'ok': True})
-        if self.path == '/api/data-platforms':
-            cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
-            # 返回配置时所有数据源的 api_key 脱敏
-            safe = json.loads(json.dumps(cfg))
-            for sid, src in safe.get('sources', {}).items():
-                key = src.get('api_key', '')
-                if key:
-                    src['api_key'] = key[:4] + '***' + key[-4:] if len(key) > 8 else '***'
-            return self._serve_json(safe)
         if self.path == '/api/engines':
             return self._serve_engines()
         return super().do_GET()
@@ -1817,12 +1928,6 @@ class Handler(SimpleHTTPRequestHandler):
             return self._test_embedding()
         if self.path == '/api/reindex':
             return self._reindex()
-        if self.path == '/api/data-platforms':
-            return self._save_data_platforms()
-        if self.path == '/api/data-proxy':
-            return self._data_proxy()
-        if self.path == '/api/data-test':
-            return self._test_data_connection()
         if self.path.startswith('/api/chat'):
             return self._engine_chat()
         if self.path == '/api/agent':
@@ -1831,6 +1936,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._mcp_discover()
         if self.path == '/api/workbuddy':
             return self._proxy_workbuddy()
+        if self.path.endswith('/api/tracks'):
+            return self._handle_tracks_post()
+        if self.path.endswith('/api/projects'):
+            return self._handle_projects_post()
         self.send_error(404)
 
     def _find_libreoffice(self):
@@ -1909,83 +2018,6 @@ class Handler(SimpleHTTPRequestHandler):
             })
         except Exception as e:
             self._serve_sse('error', {'message': str(e)})
-
-    def _save_data_platforms(self):
-        """保存数据平台配置。"""
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            return self._serve_json({'error': '无效的 JSON'}, 400)
-        # 只允许更新 provider 下的字段
-        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
-        # 支持多操作：save_source / delete_source / set_active
-        op = data.get('op', 'save_source')
-        if op == 'save_source':
-            sid = data.get('source_id', '')
-            sd = data.get('source', {})
-            if not sid or not sd.get('name'):
-                return self._serve_json({'error': 'source_id 和 name 必填'}, 400)
-            cfg.setdefault('sources', {})[sid] = {
-                'name': sd.get('name', sid),
-                'base_url': sd.get('base_url', ''),
-                'api_key': sd.get('api_key', ''),
-                'auth_header': sd.get('auth_header', 'Authorization'),
-                'auth_prefix': sd.get('auth_prefix', 'Bearer ')
-            }
-        elif op == 'delete_source':
-            sid = data.get('source_id', '')
-            if sid in cfg.get('sources', {}):
-                del cfg['sources'][sid]
-                if cfg.get('active') == sid:
-                    keys = list(cfg['sources'].keys())
-                    cfg['active'] = keys[0] if keys else ''
-        elif op == 'set_active':
-            sid = data.get('source_id', '')
-            if sid not in cfg.get('sources', {}):
-                return self._serve_json({'error': f'数据源 {sid} 不存在'}, 400)
-            cfg['active'] = sid
-        elif op == 'set_channels':
-            # 允许自定义 channels 列表
-            if 'channels' in data:
-                cfg['channels'] = data['channels']
-        _save_json(DATA_PLATFORMS_FILE, cfg)
-        return self._serve_json({'ok': True})
-
-    def _test_data_connection(self):
-        """测试活跃数据源连接。"""
-        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
-        sources = cfg.get('sources', {})
-        active_id = cfg.get('active', '')
-        source = sources.get(active_id) if active_id else (list(sources.values())[0] if sources else None)
-        if not source:
-            return self._serve_json({'error': '没有可用的数据源'}, 400)
-        if not source.get('api_key'):
-            return self._serve_json({'error': f'数据源「{source.get("name")}」未配置 API Key'}, 400)
-        try:
-            result = _call_data_api(cfg, 'hot_search', None, {})
-            return self._serve_json({'ok': True, 'source': source.get('name'), 'sample_count': len(result) if isinstance(result, list) else 0})
-        except Exception as e:
-            return self._serve_json({'error': f'连接失败：{e}'}, 400)
-
-    def _data_proxy(self):
-        """通用数据代理：接收 {channel, action, params}，转发到配置的数据源。"""
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            req_data = json.loads(body) if body else {}
-        except json.JSONDecodeError:
-            return self._serve_json({'error': '无效的 JSON'}, 400)
-        channel = req_data.get('channel', '')
-        action = req_data.get('action', 'search_note')
-        params = req_data.get('params', {})
-        cfg = _load_json(DATA_PLATFORMS_FILE, DEFAULT_DATA_PLATFORMS)
-        try:
-            result = _call_data_api(cfg, action, channel, params)
-            return self._serve_json({'ok': True, 'data': result})
-        except Exception as e:
-            return self._serve_json({'error': str(e)}, 400)
 
     def _convert_office(self):
         """Convert uploaded Office file to PDF using LibreOffice."""
@@ -2132,6 +2164,8 @@ class Handler(SimpleHTTPRequestHandler):
             engine_cfg['api_key'] = os.environ.get(env_var, '')
 
         if etype == 'rest':
+            if req_data.get('forceAgent'):
+                return self._handle_agent_engine(req_data, engine_cfg)
             return self._handle_rest_engine(req_data, engine_cfg)
         elif etype == 'sidecar':
             return self._handle_sidecar_engine(req_data, engine_cfg)
@@ -2328,8 +2362,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _handle_agent_engine(self, req_data, engine_cfg):
         """Agent 引擎 — 委托给内置的 _agent_loop"""
-        # 复用现有的 agent 循环逻辑
-        return self._agent_loop()
+        # 注入引擎配置中的 api_key / base_url
+        if 'api_key' not in req_data:
+            req_data['api_key'] = engine_cfg.get('api_key', '')
+        if 'base_url' not in req_data:
+            req_data['base_url'] = engine_cfg.get('base_url', '')
+        return self._agent_loop(req_data)
 
     # ========== 原有聊天代理方法 ==========
 
@@ -2459,6 +2497,198 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(body)
+
+    # ===== 项目追踪 API =====
+
+    def _handle_tracks_get(self):
+        """GET /api/tracks?project=xxx&days=30&status=done"""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        project = qs.get('project', [None])[0]
+        days = int(qs.get('days', [90])[0])
+        status = qs.get('status', [None])[0]
+        tracks = _load_tracks()
+        entries = tracks.get('entries', [])
+        # 筛选
+        cutoff = None
+        if days > 0:
+            cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y-%m-%d')
+        if project:
+            entries = [e for e in entries if e.get('projectId') == project]
+        if status:
+            entries = [e for e in entries if e.get('status') == status]
+        if days > 0:
+            entries = [e for e in entries if e.get('date', '') >= cutoff_date]
+        # 按日期倒序
+        entries.sort(key=lambda e: e.get('date', ''), reverse=True)
+        # 统计汇总
+        total_duration = sum(e.get('duration', 0) for e in entries)
+        total_tokens = sum(e.get('tokenUsed', 0) for e in entries)
+        total_cost = sum(e.get('cost', 0) for e in entries)
+        # 连续工作天数
+        streak = 0
+        today = datetime.date.today()
+        for i in range(365):
+            d = (today - datetime.timedelta(days=i)).strftime('%Y-%m-%d')
+            if any(e.get('date') == d for e in tracks.get('entries', [])):
+                streak += 1
+            else:
+                break
+        return self._serve_json({
+            'entries': entries,
+            'summary': {
+                'totalDuration': total_duration,
+                'totalTokens': total_tokens,
+                'totalCost': round(total_cost, 4),
+                'streak': streak,
+                'entryCount': len(entries),
+            }
+        })
+
+    def _handle_tracks_post(self):
+        """POST /api/tracks — 保存全量追踪数据"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return self._serve_json({'error': 'Invalid JSON'}, 400)
+        if 'entries' not in data and 'id' in data:
+            # 单条新增：追加到已有数据
+            tracks = _load_tracks()
+            tracks.setdefault('entries', []).append(data)
+            _save_tracks(tracks)
+            return self._serve_json({'ok': True, 'id': data.get('id')})
+        # 全量替换
+        _save_tracks(data)
+        return self._serve_json({'ok': True})
+
+    def _handle_tracks_delete(self):
+        """DELETE /api/tracks/:id — 删除单条追踪记录"""
+        parts = self.path.rstrip('/').split('/')
+        entry_id = parts[-1] if len(parts) >= 3 else None
+        if not entry_id:
+            return self._serve_json({'error': 'Missing track id'}, 400)
+        tracks = _load_tracks()
+        entries = tracks.get('entries', [])
+        new_entries = [e for e in entries if e.get('id') != entry_id]
+        if len(new_entries) == len(entries):
+            return self._serve_json({'error': 'Not found'}, 404)
+        tracks['entries'] = new_entries
+        _save_tracks(tracks)
+        return self._serve_json({'ok': True})
+
+    # ===== 项目工作流 API =====
+
+    def _handle_projects_get(self):
+        """GET /api/projects — 列出所有项目（或单个项目详情）"""
+        parts = self.path.rstrip('/').split('/')
+        projects = _load_projects()
+        # 判断是否为单个项目请求：路径形如 /api/projects/xxx
+        path_has_id = (len(parts) >= 3 and parts[-1] not in ('', 'api', 'projects'))
+        if path_has_id:
+            project_id = parts[-1]
+            proj = projects['projects'].get(project_id)
+            if not proj:
+                return self._serve_json({'error': 'Project not found'}, 404)
+            # 计算汇总
+            summary = _calc_project_summary(proj)
+            return self._serve_json({'project': proj, 'summary': summary})
+        # 列表模式：返回所有项目及汇总
+        result = {}
+        for pid, proj in projects.get('projects', {}).items():
+            summary = _calc_project_summary(proj)
+            result[pid] = {
+                'id': pid,
+                'name': proj.get('name', pid),
+                'description': proj.get('description', ''),
+                'createdAt': proj.get('createdAt', ''),
+                'phases': len(proj.get('workflow', {}).get('template', [])),
+                'summary': summary,
+            }
+        return self._serve_json({'projects': result})
+
+    def _handle_projects_post(self):
+        """POST /api/projects — 创建或更新项目；POST /api/projects/:id/import — 从日志导入"""
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return self._serve_json({'error': 'Invalid JSON'}, 400)
+
+        # 检查是否是导入请求
+        parts = self.path.rstrip('/').split('/')
+        # path 形如 http://localhost:8765/api/projects/xxx/import
+        if len(parts) >= 4 and parts[-1] == 'import':
+            return self._handle_project_import(parts[-2], data)
+
+        # 创建/更新项目
+        projects = _load_projects()
+        project_id = data.get('id') or (parts[-1] if len(parts) >= 3 and parts[-1] != 'projects' else None)
+        if not project_id:
+            return self._serve_json({'error': 'Missing project id'}, 400)
+        projects.setdefault('projects', {})[project_id] = data
+        _save_projects(projects)
+        return self._serve_json({'ok': True, 'id': project_id})
+
+    def _handle_project_delete(self):
+        """DELETE /api/projects/:id — 删除项目"""
+        parts = self.path.rstrip('/').split('/')
+        project_id = parts[-1] if len(parts) >= 3 and parts[-1] not in ('api', 'projects') else None
+        if not project_id:
+            return self._serve_json({'error': 'Missing project id'}, 400)
+        projects = _load_projects()
+        if project_id not in projects.get('projects', {}):
+            return self._serve_json({'error': 'Not found'}, 404)
+        del projects['projects'][project_id]
+        _save_projects(projects)
+        return self._serve_json({'ok': True})
+
+    def _handle_project_import(self, project_id, data):
+        """POST /api/projects/:id/import — 从日志导入步骤"""
+        projects = _load_projects()
+        proj = projects['projects'].get(project_id)
+        if not proj:
+            return self._serve_json({'error': 'Project not found'}, 404)
+
+        log_ids = data.get('logIds', [])
+        if not log_ids:
+            return self._serve_json({'error': 'No log IDs provided'}, 400)
+
+        all_logs = _load_json(LOG_FILE, {'logs': []}).get('logs', [])
+        phases = proj.get('workflow', {}).get('template', [])
+        imported = 0
+        steps = proj.setdefault('workflow', {}).setdefault('steps', [])
+
+        for log_id in log_ids:
+            log = next((l for l in all_logs if l.get('id') == log_id), None)
+            if not log:
+                continue
+            # 推断阶段
+            agent_name = log.get('agentName') or log.get('engineName') or ''
+            phase = data.get('phase') or _guess_phase(agent_name, phases)
+            # 生成步骤
+            step = {
+                'id': 'step_' + str(int(time.time() * 1000)) + '_' + str(imported),
+                'phase': phase,
+                'task': log.get('task', '')[:200],
+                'date': (log.get('timestamp', '') or '')[:10],
+                'duration': round((log.get('duration', 0) or 0) / 60, 1),  # 秒转分钟
+                'agents': [agent_name] if agent_name else [],
+                'models': [log.get('modelId') or log.get('model', '')] if (log.get('modelId') or log.get('model')) else [],
+                'tools': {'cli': [], 'mcp': log.get('toolsUsed', []) if isinstance(log.get('toolsUsed'), list) else []},
+                'tokens': log.get('totalTokens', 0) or 0,
+                'cost': 0,
+                'notes': '',
+                'status': 'done' if log.get('status') == 'success' else 'todo',
+                'importedFrom': log_id,
+            }
+            steps.append(step)
+            imported += 1
+
+        _save_projects(projects)
+        return self._serve_json({'ok': True, 'imported': imported})
 
     def _proxy_workbuddy(self):
         """将请求转发到 WorkBuddy 侧车进程 (Node.js SSE)."""
@@ -2629,15 +2859,18 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             return f'获取网页失败：{e}'
 
-    def _agent_loop(self):
+    def _agent_loop(self, req_data=None):
         """Agent loop with SSE streaming: think → tool_call → tool_result → response."""
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length)
-        try:
-            req = json.loads(body)
-        except json.JSONDecodeError:
-            self.send_error(400, "Invalid JSON")
-            return
+        if req_data is not None:
+            req = req_data
+        else:
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                req = json.loads(body)
+            except json.JSONDecodeError:
+                self.send_error(400, "Invalid JSON")
+                return
 
         api_key = req.get('api_key', '') or DEEPSEEK_API_KEY
         base_url = req.get('base_url', '')
@@ -2645,6 +2878,20 @@ class Handler(SimpleHTTPRequestHandler):
         messages = req.get('messages', [])
         workspace = req.get('workspace', '')
         max_iter = req.get('max_iterations', 10)
+        agent_id = req.get('agentId', '')
+        temperature = None
+
+        # 如果指定了 Agent，加载 Agent 配置
+        agent_cfg = None
+        if agent_id:
+            agents_data = _load_json(AGENTS_FILE, DEFAULT_AGENTS)
+            for a in agents_data.get('agents', []):
+                if a.get('id') == agent_id and a.get('status') == 'active':
+                    agent_cfg = a
+                    break
+            if agent_cfg:
+                temperature = agent_cfg.get('temperature')
+                max_iter = agent_cfg.get('maxIterations', max_iter)
 
         if not api_key or not base_url:
             self._serve_json({'error': '请先配置模型和 API Key，或在终端设置 DEEPSEEK_API_KEY 环境变量'}, 400)
@@ -2863,6 +3110,11 @@ class Handler(SimpleHTTPRequestHandler):
                     'parameters': schema.get('inputSchema', {'type': 'object', 'properties': {}})
                 }
             })
+
+        # 如果选中了 Agent，按 Agent 的工具白名单过滤
+        if agent_cfg:
+            allowed = set(agent_cfg.get('tools', []))
+            tools = [t for t in tools if t['function']['name'] in allowed]
 
         def _resolve(p):
             if not wpath:
@@ -3424,12 +3676,15 @@ class Handler(SimpleHTTPRequestHandler):
                 self._serve_sse('iteration', {'iteration': iteration, 'max_iter': max_iter})
 
                 url = base_url.rstrip('/') + '/chat/completions'
-                payload = json.dumps({
+                payload_dict = {
                     'model': model,
                     'messages': messages,
                     'tools': tools,
                     'tool_choice': 'auto'
-                }).encode('utf-8')
+                }
+                if temperature is not None:
+                    payload_dict['temperature'] = temperature
+                payload = json.dumps(payload_dict).encode('utf-8')
 
                 r = urllib.request.Request(url, data=payload, headers={
                     'Content-Type': 'application/json',

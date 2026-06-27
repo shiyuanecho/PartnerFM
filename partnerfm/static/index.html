@@ -126,6 +126,72 @@ body {
   height: 100vh;
 }
 
+/* ========== Apple 风格顶栏 ========== */
+#app-header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 32px;
+  -webkit-app-region: no-drag;
+}
+.header-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-light);
+}
+.header-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+.header-segments {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  padding: 3px;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+.header-seg {
+  padding: 5px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.header-seg.active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.header-seg:hover:not(.active) {
+  color: var(--text);
+}
+
 #main-layout {
   display: flex;
   flex: 1;
@@ -155,26 +221,6 @@ body {
   resize: none;
 }
 
-/* 侧边栏折叠按钮 */
-.sidebar-toggle-btn {
-  position: absolute;
-  top: 22px;
-  right: 10px;
-  width: 22px; height: 22px;
-  border: none; background: none;
-  cursor: pointer;
-  border-radius: 4px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  transition: color 0.15s, background 0.15s;
-  z-index: 10;
-}
-.sidebar-toggle-btn:hover {
-  color: var(--text);
-  background: var(--hover-overlay);
-}
-
 /* 侧边栏收起后的展开条 */
 #sidebar-expand-strip {
   display: none;
@@ -191,26 +237,25 @@ body {
   display: block;
 }
 
+/* 侧边栏恢复按钮 */
+#sidebar-restore {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  left: 0;
+  width: 22px; height: 56px;
+  background: rgba(248,248,252,0.95);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer; font-size: 11px; color: var(--text-tertiary);
+  z-index: 30; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; opacity: 0; pointer-events: none;
+}
+#sidebar-restore.show { opacity: 1; pointer-events: auto; }
+#sidebar-restore:hover { background: var(--bg-card); color: var(--accent); width: 24px; }
+
 /* 侧边栏顶部 */
 .sidebar-top {
-  padding: 20px 16px 12px;
-}
-.sidebar-top h1 {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
-  color: var(--text);
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.sidebar-top h1 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: inline-block;
+  padding: 8px 16px 12px;
 }
 
 /* 搜索框 */
@@ -417,8 +462,7 @@ body {
   border-color: var(--accent);
 }
 .sidebar-bottom button.primary:hover { background: var(--accent-hover); }
-#theme-toggle { flex: 0 0 auto; width: 36px; padding: 6px 0; font-size: 15px; }
-#theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#sidebar-hide-btn { flex: 0 0 auto; width: 36px; padding: 6px 0; font-size: 15px; }
 
 /* 拖拽提示 */
 #sidebar.drag-over {
@@ -1057,7 +1101,6 @@ body {
   transition: all 0.1s; line-height: 1.4;
 }
 #fullscreen-btn:hover, #scratchpad-btn:hover, #annotate-btn:hover { background: var(--bg-hover); color: var(--text); }
-#main-layout.fullscreen #module-nav { display: none !important; }
 #main-layout.fullscreen #sidebar { display: none !important; }
 #main-layout.fullscreen #chat-column { display: none !important; }
 #main-panel:fullscreen { background: var(--bg-card); overflow: auto; }
@@ -1633,30 +1676,7 @@ body {
 }
 
 /* ========== 模块导航 ========== */
-:root { --nav-width: 52px; --chat-width: 380px; }
-#module-nav {
-  width: var(--nav-width); min-width: 52px;
-  background: var(--bg-sidebar);
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; align-items: center;
-  padding-top: 8px; gap: 4px; position: relative; z-index: 10;
-}
-#module-nav.collapsed { flex: 0 0 0; width: 0; min-width: 0; max-width: 0; overflow: hidden; border: none; }
-.module-btn {
-  width: 48px; height: 48px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 2px;
-  border-radius: 10px; border: none; background: transparent;
-  cursor: pointer; font-family: var(--font); font-size: 11px;
-  color: var(--text-secondary); transition: all var(--transition-normal);
-}
-.module-btn:hover { background: var(--bg-hover); color: var(--text); transform: scale(1.04); }
-.module-btn:active { transform: scale(0.97); }
-.module-btn.active { background: var(--accent-light); color: var(--accent); font-weight: 600; transform: none; }
-.module-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.module-btn .mb-icon { font-size: 20px; line-height: 1; }
-.module-btn .mb-icon svg { width: 20px; height: 20px; display: block; }
-.module-btn .mb-label { font-size: 11px; line-height: 1.2; }
+:root { --chat-width: 380px; }
 
 /* 全局 SVG 图标工具类 */
 .app-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -1665,32 +1685,20 @@ body {
 .app-icon--md svg { width: 18px; height: 18px; }
 .app-icon--lg svg { width: 24px; height: 24px; }
 .app-icon--xl svg { width: 32px; height: 32px; }
-.module-nav-resize-handle { position: absolute; right: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
-.module-nav-resize-handle:hover, .module-nav-resize-handle:active { background: rgba(0,122,255,0.2); }
-#nav-toggle {
-  margin-top: auto; margin-bottom: 8px; width: 36px; height: 36px;
-  border-radius: 50%; border: 1px solid var(--border); background: var(--bg-card);
-  cursor: pointer; font-size: 14px; color: var(--text-tertiary);
-  display: flex; align-items: center; justify-content: center; transition: all 0.12s;
-  position: relative; z-index: 20;
-}
-#nav-toggle:hover { background: var(--bg-hover); color: var(--text); }
-#nav-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
 /* 折叠恢复按钮 */
-#nav-restore, #chat-restore {
+#chat-restore {
   position: fixed; top: 50%; transform: translateY(-50%);
+  right: 0;
   width: 22px; height: 56px;
   background: rgba(248,248,252,0.95);
   border: 1px solid var(--border);
+  border-right: none; border-radius: 8px 0 0 8px;
   cursor: pointer; font-size: 11px; color: var(--text-tertiary);
   z-index: 30; display: flex; align-items: center; justify-content: center;
   transition: all 0.15s; opacity: 0; pointer-events: none;
 }
-#nav-restore { left: 0; border-left: none; border-radius: 0 8px 8px 0; }
-#chat-restore { right: 0; border-right: none; border-radius: 8px 0 0 8px; }
-#nav-restore.show, #chat-restore.show { opacity: 1; pointer-events: auto; }
-#nav-restore:hover, #chat-restore:hover { background: var(--bg-card); color: var(--accent); width: 24px; }
+#chat-restore.show { opacity: 1; pointer-events: auto; }
+#chat-restore:hover { background: var(--bg-card); color: var(--accent); width: 24px; }
 
 /* ========== 中间列 ========== */
 #center-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
@@ -1701,6 +1709,75 @@ body {
 
 /* ========== 管理面板 ========== */
 .mgmt-panel { padding: 32px 40px; overflow-y: auto; flex: 1; }
+.mgmt-panel h2 { font-size: var(--text-2xl); font-weight: 700; margin: 0 0 6px; line-height: 1.25; }
+.mgmt-panel > p, .page-header p { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-5); max-width: 620px; }
+
+/* 统一页面头部（所有模块通用） */
+.page-header { margin-bottom: var(--space-5); }
+.page-header h2 { margin-bottom: 4px; }
+
+/* ========== 配置子标签页 ========== */
+.config-subtabs {
+  display: inline-flex; gap: 4px; margin-bottom: 18px;
+  background: var(--bg-surface); border-radius: 10px; padding: 4px;
+}
+.config-subtab {
+  padding: 7px 18px; border: none; background: transparent; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  border-radius: 7px; transition: all var(--transition-fast); font-family: var(--font);
+  white-space: nowrap;
+}
+.config-subtab.active {
+  background: var(--bg-card); color: var(--text);
+  box-shadow: var(--shadow);
+}
+.config-subtab:hover:not(.active) { color: var(--text); }
+
+/* 统一配置添加按钮 */
+.config-add-btn { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-sm);
+  padding: 7px 16px; border-radius: var(--radius-sm); border: 1px dashed var(--accent);
+  background: var(--accent-light); color: var(--accent); cursor: pointer;
+  font-family: var(--font); margin-bottom: var(--space-4); transition: all var(--transition-fast); }
+.config-add-btn:hover { background: var(--accent-light); border-style: solid; transform: translateY(-1px); }
+.config-add-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 统一配置列表卡片 */
+.config-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 18px; margin-bottom: 8px;
+  transition: all var(--transition-normal);
+  display: flex; align-items: center; gap: 16px;
+}
+.config-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
+.config-card-body { flex: 1; min-width: 0; }
+.config-card-body h4 { font-size: 14px; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.config-card-body p { font-size: var(--text-xs); color: var(--text-secondary); margin: 0; line-height: 1.4; }
+.config-card-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+.config-card-tag.accent { background: var(--accent-light); color: var(--accent); }
+.config-card-tag.neutral { background: var(--bg-surface); color: var(--text-tertiary); }
+.config-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.config-card-actions button { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-card); cursor: pointer; font-size: 11px; color: var(--text-secondary);
+  font-family: var(--font); transition: all var(--transition-fast); }
+.config-card-actions button:hover { background: var(--bg-hover); color: var(--text); }
+.config-card-actions button.danger { color: var(--color-danger-text); }
+.config-card-actions button.danger:hover { background: var(--color-danger-bg); }
+
+/* 配置面板内联 schema 与状态行 */
+.config-meta-row { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 4px;
+  display: flex; flex-wrap: wrap; gap: 8px; }
+.config-meta-row code { padding: 1px 5px; background: var(--bg-surface); border-radius: 3px; font-size: 10px; }
+.config-empty { padding: 32px 0; text-align: center; color: var(--text-tertiary); font-size: var(--text-sm); }
+.config-empty a { color: var(--accent); text-decoration: none; }
+.config-empty a:hover { text-decoration: underline; }
+
+/* ========== Toggle 开关 ========== */
+.toggle-switch { position:relative; display:inline-block; width:40px; height:22px; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--toggle-bg); border-radius:11px; transition:var(--transition-normal); }
+.toggle-slider:before { content:""; position:absolute; height:16px; width:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:var(--transition-normal); box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+.toggle-switch input:checked + .toggle-slider { background:var(--accent); }
+.toggle-switch input:checked + .toggle-slider:before { transform:translateX(18px); }
 /* ========== 统一卡片组件 ========== */
 .mgmt-card, .prompt-card, .skill-card, .mcp-card, .provider-card {
   background: var(--bg-card);
@@ -1747,6 +1824,8 @@ body {
 .prompt-add-btn { font-size:var(--text-sm); padding:6px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; font-family:var(--font); margin-bottom:16px; transition:all var(--transition-fast); }
 .prompt-add-btn:hover { opacity:0.9; transform: translateY(-1px); }
 .prompt-add-btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#emb-test-btn:hover { background:var(--bg-hover); border-color:var(--accent); color:var(--accent); }
+#emb-save-btn:hover { background:var(--bg-hover); border-color:var(--accent); color:var(--accent); }
 .prompt-card { padding:14px 18px; margin-bottom:8px; display:flex; align-items:flex-start; gap:12px; }
 .prompt-card-body { flex:1; min-width:0; }
 .prompt-card-body h4 { font-size:var(--text-md); font-weight:600; margin:0 0 4px; }
@@ -1788,20 +1867,6 @@ body {
 .chat-skill-tag:hover { background:#d2e3fc; }
 .chat-skills-edit { flex-shrink:0; width:20px; height:20px; border-radius:4px; border:1px solid var(--border); background:var(--bg-card); cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; color:var(--text-tertiary); padding:0; }
 
-/* 数据监测模块 */
-.data-channel-tab { padding:5px 12px; font-size:12px; border-radius:6px; cursor:pointer; background:var(--bg-card); font-family:var(--font); transition:all 0.15s; }
-.data-channel-tab:hover { background:var(--bg-hover); }
-.data-result-card { display:flex; gap:10px; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:8px; align-items:flex-start; transition:all var(--transition-normal); }
-.data-result-card:hover { border-color:var(--accent); box-shadow:var(--shadow-card-hover); transform:translateY(-1px); }
-.data-result-avatar { width:44px; height:44px; border-radius:6px; object-fit:cover; flex-shrink:0; background:var(--bg); }
-.data-result-body { flex:1; min-width:0; }
-.data-result-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:3px; word-break:break-all; }
-.data-result-desc { font-size:11px; color:var(--text-secondary); margin-bottom:3px; line-height:1.5; }
-.data-result-meta { font-size:10px; color:var(--text-tertiary); }
-.data-source-card { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:6px; transition:all var(--transition-normal); }
-.data-source-card:hover { box-shadow:var(--shadow-card-hover); transform:translateY(-1px); }
-.data-src-btn { padding:3px 10px; font-size:11px; border:1px solid var(--border); border-radius:5px; background:var(--bg-card); cursor:pointer; font-family:var(--font); transition:all 0.15s; }
-.data-src-btn:hover { background:var(--bg-hover); }
 .chat-skills-edit:hover { background:var(--bg-hover); color:var(--text); }
 
 /* Skill card detail & actions */
@@ -1874,7 +1939,7 @@ body {
 /* 今日 Hero 卡 */
 .usage-hero { padding:18px 20px; border:1px solid var(--border); border-radius:12px; background:var(--bg-surface); margin-bottom:14px; position:relative; }
 .usage-hero-label { font-size:11px; color:var(--text-tertiary); margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; }
-.usage-hero-date { font-size:10px; color:var(--text-tertiary); background:var(--bg-input); padding:2px 8px; border-radius:10px; }
+.usage-hero-date { font-size:10px; color:var(--text-tertiary); background:var(--bg-card); padding:2px 8px; border-radius:10px; }
 .usage-hero-main { display:flex; align-items:baseline; gap:8px; }
 .usage-hero-num { font-size:32px; font-weight:800; color:var(--text); letter-spacing:-1px; line-height:1; }
 .usage-hero-unit { font-size:13px; color:var(--text-secondary); }
@@ -1901,7 +1966,7 @@ body {
 .usage-rank-name { display:flex; align-items:center; gap:7px; overflow:hidden; }
 .usage-rank-dot { flex-shrink:0; width:8px; height:8px; border-radius:50%; }
 .usage-rank-label { font-size:12px; font-weight:500; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.usage-rank-bar-wrap { height:6px; background:var(--bg-input); border-radius:3px; overflow:hidden; }
+.usage-rank-bar-wrap { height:6px; background:var(--bg-card); border-radius:3px; overflow:hidden; }
 .usage-rank-bar-fill { height:100%; border-radius:3px; transition:width 0.5s cubic-bezier(.4,0,.2,1); }
 .usage-rank-right { text-align:right; white-space:nowrap; }
 .usage-rank-val { font-size:12px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; }
@@ -1925,7 +1990,7 @@ body {
 .usage-bar-name { font-weight:500; color:var(--text); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:55%; }
 .usage-bar-stat { color:var(--text-tertiary); font-size:11px; white-space:nowrap; }
 .usage-bar-stat b { color:var(--text-secondary); font-weight:500; }
-.usage-bar-track { height:6px; background:var(--bg-input); border-radius:3px; overflow:hidden; }
+.usage-bar-track { height:6px; background:var(--bg-card); border-radius:3px; overflow:hidden; }
 .usage-bar-fill { height:100%; background:var(--accent); border-radius:3px; transition:width var(--transition-normal); }
 
 /* 堆叠柱状图（每天用量，多工具多色） */
@@ -1954,7 +2019,7 @@ body {
 .ai-tool-info { font-size:10.5px; color:var(--text-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ai-status-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:10.5px; font-weight:600; width:fit-content; }
 .ai-status-badge.running { background:var(--color-success-bg); color:var(--color-success-text); }
-.ai-status-badge.idle { background:var(--bg-input); color:var(--text-secondary); }
+.ai-status-badge.idle { background:var(--bg-card); color:var(--text-secondary); }
 .ai-status-badge.missing { background:transparent; color:var(--text-tertiary); border:1px solid var(--border); }
 .ai-status-badge .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
 .ai-status-badge.running .dot { animation:pulse 1.8s infinite; }
@@ -2235,6 +2300,7 @@ body {
 .chat-input-selector svg { width: 14px; height: 14px; flex-shrink: 0; }
 .chat-input-selector select { appearance: none; -webkit-appearance: none; background: transparent; border: none; color: inherit; font-size: 12px; font-family: var(--font); cursor: pointer; padding: 0; outline: none; max-width: 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #model-selector-wrap select { max-width: 70px; }
+#agent-selector-wrap select { max-width: 78px; }
 #role-selector-wrap select { max-width: 65px; }
 .chat-input-selector .sel-chevron { width: 10px; height: 10px; opacity: 0.5; transition: transform var(--transition-fast); }
 /* 内容预览区（附件缩略图 + 上下文标签） */
@@ -2297,6 +2363,90 @@ body {
   transition: transform var(--transition-fast), background var(--transition-fast), right var(--transition-slow);
 }
 .float-create-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+
+/* ===== 项目工作流 ===== */
+.project-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.project-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; transition: border-color .2s, transform .15s; }
+.project-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.project-card h3 { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+.project-card .p-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+.project-card .p-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); }
+.project-card .p-meta span { white-space: nowrap; }
+.project-card .p-bar { margin-top: 12px; height: 4px; border-radius: 2px; background: var(--bg-surface); overflow: hidden; }
+.project-card .p-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .5s; }
+.project-empty { text-align: center; padding: 80px 20px; color: var(--text-tertiary); }
+.project-empty svg { width: 52px; height: 52px; opacity: 0.25; margin-bottom: 14px; }
+
+.project-detail-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.project-detail-top .back-btn { padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); cursor: pointer; font-size: 13px; color: var(--text); }
+.project-detail-top .back-btn:hover { background: var(--bg-hover); }
+.project-stats { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); margin-bottom: 18px; }
+.project-stats strong { color: var(--accent); font-weight: 500; }
+
+.flowchart { overflow-x: auto; padding-bottom: 8px; margin-bottom: 20px; }
+.flowchart-wrap { display: flex; align-items: center; gap: 0; min-width: max-content; }
+.flow-node { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 16px; text-align: center; cursor: pointer; transition: border-color .2s; white-space: nowrap; min-width: 100px; }
+.flow-node:hover { border-color: var(--accent); }
+.flow-node.active { border-color: var(--accent); background: #E6F1FB; }
+.flow-node.done { border-color: #5DCAA5; }
+.flow-node.doing { border-color: #EF9F27; border-style: dashed; }
+.flow-node .fn-name { font-weight: 500; font-size: 13px; margin-bottom: 4px; }
+.flow-node .fn-icon { font-size: 16px; }
+.flow-node .fn-stats { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.flow-arrow { padding: 0 4px; font-size: 14px; color: var(--text-tertiary); flex-shrink: 0; }
+
+.phase-steps { border-top: 1px solid var(--border); padding-top: 14px; }
+.phase-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 500; }
+.step-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.step-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; cursor: pointer; transition: border-color .15s; }
+.step-card:hover { border-color: var(--accent); }
+.step-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.step-card .sc-task { font-weight: 500; font-size: 13px; }
+.step-card .sc-meta { font-size: 12px; color: var(--text-secondary); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+.step-card .sc-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.step-card .sc-actions button { padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); cursor: pointer; font-size: 11px; color: var(--text-secondary); }
+.step-card .sc-actions button:hover { background: var(--bg-hover); }
+.step-card .sc-actions button.danger:hover { background: #FCEBEB; color: #A32D2D; border-color: #F09595; }
+
+.import-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.import-modal { background: var(--bg-card); border-radius: 14px; padding: 24px; width: 560px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+.import-modal h2 { font-size: 16px; font-weight: 500; margin-bottom: 16px; }
+.import-log-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; cursor: pointer; transition: border-color .15s; font-size: 13px; }
+.import-log-item:hover { border-color: var(--accent); }
+.import-log-item.selected { border-color: var(--accent); background: #E6F1FB; }
+.import-log-item input[type=checkbox] { margin-top: 3px; flex-shrink: 0; }
+.import-log-item .il-info { flex: 1; }
+.import-log-item .il-name { font-weight: 500; }
+.import-log-item .il-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.import-form-bottom { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.import-form-bottom select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-card); }
+.import-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* 复用 track 表单样式为 step 表单 */
+.step-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.step-modal { background: var(--bg-card); border-radius: 14px; padding: 28px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.step-modal h2 { font-size: 16px; font-weight: 500; margin-bottom: 20px; }
+.step-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.step-form-grid .full { grid-column: 1 / -1; }
+.step-form-grid label { font-size: 12px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+.step-form-grid input, .step-form-grid select, .step-form-grid textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-surface); color: var(--text); font-family: var(--font); resize: vertical; }
+.step-form-grid textarea { min-height: 60px; }
+.step-form-grid input:focus, .step-form-grid select:focus, .step-form-grid textarea:focus { outline: none; border-color: var(--accent); }
+.step-tag-input { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface); min-height: 34px; align-items: center; cursor: text; }
+.step-tag-input .tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--accent); color: #fff; }
+.step-tag-input .tag button { background: none; border: none; color: inherit; cursor: pointer; font-size: 12px; line-height: 1; padding: 0; opacity: 0.7; }
+.step-tag-input .tag button:hover { opacity: 1; }
+.step-tag-input input { flex: 1; min-width: 60px; border: none; background: none; outline: none; font-size: 12px; padding: 3px; }
+.step-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.step-form-actions button { padding: 8px 18px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; }
+.step-form-actions .btn-primary { background: var(--accent); color: #fff; }
+.step-form-actions .btn-primary:hover { background: var(--accent-hover); }
+.step-form-actions .btn-cancel { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); }
+.step-form-actions .btn-danger { background: #FCEBEB; color: #A32D2D; border: 1px solid #F09595; }
+.step-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.step-status.todo { background: #F1EFE8; color: #5F5E5A; }
+.step-status.doing { background: #E6F1FB; color: #185FA5; }
+.step-status.done { background: #E1F5EE; color: #0F6E56; }
 .float-create-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 </style>
 </head>
@@ -2343,7 +2493,6 @@ body {
       <circle cx="15" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
       <path d="M9 10v-2M15 10v-2M9 14v2M15 14v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
     </symbol>
-    <!-- 数据监测/图表 -->
     <symbol id="icon-data" viewBox="0 0 24 24">
       <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
     </symbol>
@@ -2512,52 +2661,31 @@ body {
 </svg>
 
 <div id="app">
-  <div id="main-layout">
-    <!-- ===== 列 1：模块导航 ===== -->
-    <nav id="module-nav">
-      <button class="module-btn active" data-module="file" title="文件管理">
-        <span class="mb-icon"><svg><use href="#icon-folder"/></svg></span><span class="mb-label">文件</span>
-      </button>
-      <button class="module-btn" data-module="model" title="模型管理">
-        <span class="mb-icon"><svg><use href="#icon-ai"/></svg></span><span class="mb-label">模型</span>
-      </button>
-      <button class="module-btn" data-module="cli" title="CLI管理">
-        <span class="mb-icon"><svg><use href="#icon-cli"/></svg></span><span class="mb-label">CLI</span>
-      </button>
-      <button class="module-btn" data-module="mcp" title="MCP管理">
-        <span class="mb-icon"><svg><use href="#icon-plug"/></svg></span><span class="mb-label">MCP</span>
-      </button>
-      <button class="module-btn" data-module="role" title="系统角色">
-        <span class="mb-icon"><svg><use href="#icon-role"/></svg></span><span class="mb-label">角色</span>
-      </button>
-      <button class="module-btn" data-module="agent" title="智能体管理">
-        <span class="mb-icon"><svg><use href="#icon-agent"/></svg></span><span class="mb-label">Agent</span>
-      </button>
-      <button class="module-btn" data-module="data" title="数据监测">
-        <span class="mb-icon"><svg><use href="#icon-data"/></svg></span><span class="mb-label">监测</span>
-      </button>
-      <button class="module-btn" data-module="log" title="操作日志">
-        <span class="mb-icon"><svg><use href="#icon-log"/></svg></span><span class="mb-label">日志</span>
-      </button>
-      <button class="module-btn" data-module="usage" title="用量统计">
-        <span class="mb-icon"><svg><use href="#icon-usage"/></svg></span><span class="mb-label">用量</span>
-      </button>
-      <button id="nav-toggle" title="折叠导航栏"><svg width="14" height="14"><use href="#icon-chevron-left"/></svg></button>
-      <div class="module-nav-resize-handle" id="nav-resizer"></div>
-    </nav>
+  <!-- ===== Apple 风格顶栏 ===== -->
+  <header id="app-header">
+    <div class="header-brand">
+      <span class="header-title">PartnerFM</span>
+    </div>
+    <div class="header-segments">
+      <button class="header-seg active" data-module="file">项目</button>
+      <button class="header-seg" data-module="config">配置</button>
+      <button class="header-seg" data-module="usage">用量</button>
+      <button class="header-seg" data-module="log">日志</button>
+      <button class="header-seg" data-module="settings">设置</button>
+    </div>
+  </header>
 
-    <!-- ===== 列 2：中间内容区 ===== -->
+  <div id="main-layout">
+    <!-- ===== 中间内容区 ===== -->
     <div id="center-panel">
 
       <!-- 文件模块 -->
       <div id="file-module" class="module-content active">
         <!-- 侧边栏 -->
         <aside id="sidebar">
-          <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="折叠文件夹列表 (⌘B)">◀</button>
           <div class="sidebar-resize-handle" id="sidebar-resizer"></div>
           <div class="drop-hint"><span class="app-icon app-icon--md" style="margin-right:4px"><svg><use href="#icon-folder-open"/></svg></span>松手添加文件夹</div>
           <div class="sidebar-top">
-            <h1>PartnerFM</h1>
             <div class="search-wrap">
               <span class="search-icon"><svg width="15" height="15"><use href="#icon-search"/></svg></span>
               <input type="text" id="search-input" placeholder="搜索文件...">
@@ -2565,12 +2693,13 @@ body {
           </div>
           <div id="folder-list"></div>
           <div class="sidebar-bottom">
-            <button id="add-folder-btn" class="primary"><span class="app-icon app-icon--sm" style="margin-right:3px"><svg><use href="#icon-add"/></svg></span>添加文件夹</button>
+            <button id="add-folder-btn"><span class="app-icon app-icon--sm"><svg><use href="#icon-add"/></svg></span></button>
             <button id="refresh-btn"><span class="app-icon app-icon--sm"><svg><use href="#icon-refresh"/></svg></span></button>
-            <button id="theme-toggle" onclick="toggleTheme()" title="切换深色/浅色模式"><span class="app-icon app-icon--sm"><svg><use href="#icon-moon"/></svg></span></button>
+            <button id="sidebar-hide-btn" title="隐藏文件夹区域"><span class="app-icon app-icon--sm"><svg><use href="#icon-chevron-left"/></svg></span></button>
           </div>
         </aside>
         <div id="sidebar-expand-strip" title="展开文件夹列表"></div>
+        <div id="sidebar-restore" title="展开文件夹列表">▶</div>
         <!-- 主内容区 -->
         <div id="main-panel">
           <div id="tab-bar"></div>
@@ -2657,23 +2786,40 @@ body {
         </div>
       </div>
 
-      <!-- 模型模块 -->
-      <div id="model-module" class="module-content">
+      <!-- 配置模块（模型 + CLI + MCP + 智能体 + 技能） -->
+      <div id="config-module" class="module-content">
         <div class="mgmt-panel">
-          <h2>模型管理</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">配置大模型 API Key，在右侧聊天窗口中选择使用。</p>
+          <div class="config-subtabs">
+            <button class="config-subtab active" data-config-tab="model">模型</button>
+            <button class="config-subtab" data-config-tab="cli">CLI</button>
+            <button class="config-subtab" data-config-tab="mcp">MCP</button>
+            <button class="config-subtab" data-config-tab="agent">智能体</button>
+            <button class="config-subtab" data-config-tab="skill">技能</button>
+          </div>
+          <div id="config-panel-model" class="config-panel active"></div>
+          <div id="config-panel-cli" class="config-panel" style="display:none"></div>
+          <div id="config-panel-mcp" class="config-panel" style="display:none"></div>
+          <div id="config-panel-agent" class="config-panel" style="display:none"></div>
+          <div id="config-panel-skill" class="config-panel" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- 模型模块 -->
+      <div id="model-module" class="module-content config-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 18px">
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">配置大模型 API Key，在右侧聊天窗口中选择使用。添加后即可在模型选择器中切换。</p>
+            <button class="config-add-btn" onclick="openAddProviderModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
+          </div>
           <div id="model-list"></div>
 
-          <!-- 向量检索配置 -->
-          <h2 style="margin-top:32px">向量检索配置</h2>
-          <p style="color:var(--text-secondary);margin-bottom:16px;font-size:13px">
-            配置 embedding 服务后，AI 可对你的文件做<strong>语义搜索</strong>（按意思找，不只按关键词）。
-            <span style="color:var(--text-tertiary)">注：文件内容会发送到该服务计算向量。</span>
-          </p>
-          <div id="embedding-config-box" style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;max-width:520px">
+          <div class="page-header" style="margin-top:var(--space-8)">
+            <h2>向量检索配置</h2>
+            <p>配置 embedding 服务后，AI 可对你的文件做<strong>语义搜索</strong>（按意思找，不只按关键词）。<span style="color:var(--text-tertiary)">文件内容会发送到该服务计算向量。</span></p>
+          </div>
+          <div id="embedding-config-box" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px">
             <div style="display:grid;grid-template-columns:90px 1fr;gap:10px 12px;align-items:center;font-size:13px">
-              <label>服务商</label>
-              <select id="emb-provider" onchange="onEmbProviderChange()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+              <label style="color:var(--text-tertiary);font-size:13px">服务商</label>
+              <select id="emb-provider" onchange="onEmbProviderChange()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%">
                 <option value="">请选择</option>
                 <optgroup label="国际">
                   <option value="openai">OpenAI</option>
@@ -2689,50 +2835,48 @@ body {
                   <option value="custom">自定义（OpenAI 兼容）</option>
                 </optgroup>
               </select>
-              <label>API Key</label>
-              <input id="emb-key" type="password" placeholder="sk-..." style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
-              <label>Base URL</label>
-              <input id="emb-url" placeholder="https://api.openai.com/v1" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono)">
-              <label>模型名</label>
-              <input id="emb-model" placeholder="text-embedding-3-small" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono)">
+              <label style="color:var(--text-tertiary);font-size:13px">API Key</label>
+              <input id="emb-key" type="password" placeholder="sk-..." style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
+              <label style="color:var(--text-tertiary);font-size:13px">Base URL</label>
+              <input id="emb-url" placeholder="https://api.openai.com/v1" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
+              <label style="color:var(--text-tertiary);font-size:13px">模型名</label>
+              <input id="emb-model" placeholder="text-embedding-3-small" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
             </div>
-            <div id="emb-note" style="display:none;margin-top:8px;font-size:11px;color:#b45309;background:var(--bg-card)beb;padding:6px 10px;border-radius:6px;border:1px solid #fde68a"></div>
-            <div style="margin-top:14px;display:flex;gap:8px">
-              <button class="prompt-add-btn" onclick="saveEmbeddingConfig()" style="padding:6px 14px"><span class="app-icon app-icon--sm" style="margin-right:3px"><svg><use href="#icon-save"/></svg></span>保存</button>
-              <button onclick="testEmbedding()" id="emb-test-btn" style="padding:6px 14px;font-size:13px;border:1px solid var(--border);background:var(--bg-card);border-radius:8px;cursor:pointer"><span class="app-icon app-icon--sm" style="margin-right:3px"><svg><use href="#icon-test"/></svg></span>测试连接</button>
-              <span id="emb-status" style="font-size:12px;color:var(--text-tertiary);align-self:center"></span>
+            <div id="emb-note" style="display:none;margin-top:8px;font-size:11px;color:var(--color-warning-text, #b45309);background:var(--color-warning-bg, #fffbeb);padding:6px 10px;border-radius:6px;border:1px solid var(--color-warning-border, #fde68a)"></div>
+            <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+              <button id="emb-save-btn" onclick="saveEmbeddingConfig()" style="padding:6px 14px;margin-bottom:0;font-size:13px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);border-radius:6px;cursor:pointer;font-family:var(--font);transition:all var(--transition-fast);display:inline-flex;align-items:center;gap:4px"><span class="app-icon app-icon--sm"><svg><use href="#icon-save"/></svg></span>保存</button>
+              <button onclick="testEmbedding()" id="emb-test-btn" style="padding:6px 14px;font-size:13px;border:1px solid var(--border);background:var(--bg-card);border-radius:6px;cursor:pointer;font-family:var(--font);color:var(--text);transition:all var(--transition-fast)"><span class="app-icon app-icon--sm" style="margin-right:3px"><svg><use href="#icon-test"/></svg></span>测试连接</button>
+              <span id="emb-status" style="font-size:12px;color:var(--text-tertiary)"></span>
             </div>
           </div>
-        </div>
       </div>
 
       <!-- CLI 模块 -->
-      <div id="cli-module" class="module-content">
-        <div class="mgmt-panel">
-          <h2>CLI 管理</h2>
-          <p style="color:var(--text-secondary);margin-bottom:4px">CLI 工具和外部智能体。内置条目可查看不可删除，手动添加的可以编辑和删除。</p>
-          <button class="prompt-add-btn" onclick="openCliModal()">＋ 新增 CLI 工具</button>
+      <div id="cli-module" class="module-content config-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 18px">
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">CLI 工具和外部智能体。内置条目可查看不可删除，手动添加的可以编辑和删除。</p>
+            <button class="config-add-btn" onclick="openCliModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
+          </div>
           <div id="cli-list"></div>
-        </div>
       </div>
 
       <!-- MCP 模块 -->
-      <div id="mcp-module" class="module-content">
-        <div class="mgmt-panel">
-          <h2>MCP 服务器</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">配置 MCP（Model Context Protocol）CLI 服务器，为 AI 扩展外部工具能力。启用后 AI 可在对话中直接调用这些工具。</p>
+      <div id="mcp-module" class="module-content config-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 18px">
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">配置 MCP（Model Context Protocol）服务器，为 AI 扩展外部工具能力。启用后 AI 可在对话中直接调用这些工具。</p>
+            <button class="config-add-btn" onclick="openMcpModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
+          </div>
 
-          <!-- 内置工具能力展示卡（只读，不可配置/删除） -->
+          <!-- 内置工具能力展示卡 -->
           <div class="mcp-card builtin-tool-card" style="margin-bottom:16px">
             <div class="mcp-card-body">
               <div style="display:flex;align-items:center;gap:8px">
                 <span style="font-weight:600;font-size:14px">本地文件</span>
-                <span style="font-size:10px;padding:1px 6px;background:rgba(0,122,255,0.1);color:var(--accent);border-radius:4px">内置</span>
+                <span style="font-size:10px;padding:1px 6px;background:var(--accent-light);color:var(--accent);border-radius:4px">内置</span>
                 <span class="mcp-status-dot online" title="始终启用"></span>
               </div>
               <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                AI 可读写你绑定的文件夹：列出目录、读取/写入文件、全文搜索。右键侧边栏文件夹 →「绑定 AI 路径」启用。
-              </div>
+                AI 可读写你绑定的文件夹。右键侧边栏文件夹 →「绑定 AI 路径」启用。</div>
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
                 <code style="font-size:11px;padding:2px 8px;background:var(--bg-surface);border-radius:4px">list_dir</code>
                 <code style="font-size:11px;padding:2px 8px;background:var(--bg-surface);border-radius:4px">read_file</code>
@@ -2742,86 +2886,46 @@ body {
             </div>
           </div>
 
-          <button class="prompt-add-btn" onclick="openMcpModal()">＋ 新增 MCP 服务器</button>
           <div id="mcp-list"></div>
-        </div>
-      </div>
-
-      <!-- 角色模块 -->
-      <div id="role-module" class="module-content">
-        <div class="mgmt-panel">
-          <h2>系统角色</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">选择一个角色，AI 将按照该角色的专业身份思考和回复。相当于给 AI 预设一个「专家」人格。</p>
-          <button class="prompt-add-btn" onclick="openRoleModal()">＋ 新增角色</button>
-          <div id="role-list"></div>
-        </div>
       </div>
 
       <!-- Agent 智能体管理模块 -->
-      <div id="agent-module" class="module-content">
-        <div class="mgmt-panel">
-          <div class="agent-tabs">
-            <button class="agent-tab active" data-agent-tab="list">智能体列表</button>
-            <button class="agent-tab" data-agent-tab="projects">项目映射</button>
+      <div id="agent-module" class="module-content config-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 18px">
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">智能体 = 系统提示词 + 绑定模型 + 工具白名单。创建不同智能体来处理不同类型的任务。</p>
+            <button class="config-add-btn" onclick="openAgentModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
           </div>
-          <div id="agent-tab-list">
-            <p style="color:var(--text-secondary);margin-bottom:20px">智能体 = 角色提示词 + 模型 + 工具白名单。创建不同智能体来处理不同类型的任务。</p>
-            <button class="prompt-add-btn" onclick="openAgentModal()">＋ 新建智能体</button>
-            <div id="agent-list"></div>
-          </div>
-          <div id="agent-tab-projects" style="display:none">
-            <p style="color:var(--text-secondary);margin-bottom:20px">将智能体关联到具体项目，聊天时自动使用该项目的默认智能体。</p>
-            <button class="prompt-add-btn" onclick="openProjectMappingModal()">＋ 新增映射</button>
-            <div id="project-agent-table"></div>
-          </div>
-        </div>
+          <div id="agent-list"></div>
       </div>
 
-      <!-- 用量统计模块 -->
+      <!-- 技能模块（SKILL.md 工作流指南） -->
+      <div id="skill-module" class="module-content config-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 18px">
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">Skill 是一套可执行的工作流指南（Markdown 格式）。启用后，AI 在遇到匹配任务时会按照 Skill 规定的流程执行。</p>
+            <button class="config-add-btn" onclick="openSkillModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
+          </div>
+          <div id="skill-list"></div>
+      </div>
+
+      <!-- 本机 AI 用量监控模块 -->
       <div id="usage-module" class="module-content">
         <div class="mgmt-panel">
-          <h2>用量统计</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">查看自身 AI 调用用量统计，或监控本机其他 AI 工具的运行状态。</p>
-          <div class="usage-tab-bar">
-            <button class="usage-tab-btn active" data-utab="self">自身用量</button>
-            <button class="usage-tab-btn" data-utab="monitor">本机 AI 监控</button>
+          <div class="page-header">
+            <h2>本机 AI 用量</h2>
+            <p>监控本机所有 AI 工具的 Token 消耗，包括 PartnerFM 自身用量。</p>
           </div>
-
-          <!-- Tab 1: 自身用量 -->
-          <div id="usage-pane-self" class="usage-pane active">
-            <!-- 周期切换 -->
-            <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px">
-              <button class="usage-period-btn active" data-period="7">7 天</button>
-              <button class="usage-period-btn" data-period="30">30 天</button>
-              <button class="usage-period-btn" data-period="90">全部</button>
-            </div>
-            <!-- 今日 Hero 卡 -->
-            <div id="usage-hero"></div>
-            <!-- 3 格汇总 -->
-            <div id="usage-summary" class="usage-stat-row"></div>
-            <!-- 维度切换 -->
-            <div class="usage-dim-bar">
-              <button class="usage-dim-btn active" data-dim="model">按模型</button>
-              <button class="usage-dim-btn" data-dim="agent">按智能体</button>
-              <button class="usage-dim-btn" data-dim="date">每日趋势</button>
-            </div>
-            <div id="usage-detail"></div>
-          </div>
-
-          <!-- Tab 2: 本机 AI 监控 -->
-          <div id="usage-pane-monitor" class="usage-pane">
-            <div id="ai-token-section"></div>
-            <div id="ai-token-history"></div>
-
-          </div>
+          <div id="ai-token-section"></div>
+          <div id="ai-token-history"></div>
         </div>
       </div>
 
       <!-- 操作日志模块 -->
       <div id="log-module" class="module-content">
         <div class="mgmt-panel">
-          <h2>操作日志</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">记录每次 Agent 调用：用了什么模型、调了什么工具、产出了什么文件、耗时多少。</p>
+          <div class="page-header">
+            <h2>操作日志</h2>
+            <p>记录 PartnerFM 每次 Agent 调用的任务、模型、轮次、工具、产出文件、Token、耗时、状态。</p>
+          </div>
           <div class="log-filter-bar">
             <select id="log-filter-agent" onchange="renderLogList()">
               <option value="">全部 Agent</option>
@@ -2841,33 +2945,21 @@ body {
         </div>
       </div>
 
-      <!-- 数据监测模块 -->
-      <div id="data-module" class="module-content">
+      <!-- 设置模块 -->
+      <div id="settings-module" class="module-content">
         <div class="mgmt-panel">
-          <h2>数据监测</h2>
-          <p style="color:var(--text-secondary);margin-bottom:20px">新媒体数据聚合查询。需先配置数据源 API Key。</p>
-
-          <!-- 数据源配置 -->
-          <details id="data-config-details" style="margin-bottom:20px;font-size:13px">
-            <summary style="cursor:pointer;padding:6px 0;font-weight:500">数据源管理</summary>
-            <div style="margin-top:8px" id="data-source-list"></div>
-            <button class="prompt-add-btn" onclick="openDataSourceModal()" style="padding:5px 12px;font-size:12px;margin-top:8px">＋ 新增数据源</button>
-            <span id="dp-status" style="font-size:11px;color:var(--text-tertiary);margin-left:10px"></span>
-          </details>
-
-          <!-- 平台 tabs -->
-          <div id="data-channel-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px"></div>
-
-          <!-- 搜索区 -->
-          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-            <input id="data-search-input" placeholder="搜索关键词..." style="flex:1;max-width:300px;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;outline:none;background:var(--bg-card)" onkeydown="if(event.key==='Enter')dataSearch('search_note')">
-            <button class="prompt-add-btn" onclick="dataSearch('search_account')" style="padding:5px 12px;font-size:12px">搜账号</button>
-            <button class="prompt-add-btn" onclick="dataSearch('search_note')" style="padding:5px 12px;font-size:12px">搜内容</button>
-            <button onclick="loadHotList()" style="padding:5px 12px;font-size:12px;border:1px solid var(--border);background:var(--bg-card);border-radius:6px;cursor:pointer">热门</button>
+          <div class="page-header">
+            <h2>设置</h2>
           </div>
-
-          <!-- 结果列表 -->
-          <div id="data-results"></div>
+          <div class="config-card" style="cursor:pointer" onclick="toggleTheme()">
+            <div class="config-card-body">
+              <h4>外观</h4>
+              <p>切换深色 / 浅色模式</p>
+            </div>
+            <div class="config-card-actions">
+              <span id="settings-theme-label" style="font-size:12px;color:var(--text-secondary)"></span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2914,14 +3006,14 @@ body {
           <div class="guide-panel" id="guide-panel"></div>
           <!-- 斜杠命令面板 -->
           <div class="slash-panel" id="slash-panel"></div>
-          <!-- 顶部工具栏：模型 + 角色选择 -->
+          <!-- 顶部工具栏：模型 + 智能体选择 -->
           <div class="chat-input-toolbar">
             <div class="chat-input-selector" id="model-selector-wrap">
               <select id="chat-model-select" onchange="onChatModelChange()"><option value="">选择模型</option></select>
               <svg class="sel-chevron"><use href="#icon-chevron-down"/></svg>
             </div>
-            <div class="chat-input-selector" id="role-selector-wrap">
-              <select id="chat-role-select" onchange="onChatRoleChange()"><option value="">选择角色</option></select>
+            <div class="chat-input-selector" id="agent-selector-wrap">
+              <select id="chat-agent-select" onchange="onChatAgentChange()"><option value="">选择智能体</option></select>
               <svg class="sel-chevron"><use href="#icon-chevron-down"/></svg>
             </div>
           </div>
@@ -2953,7 +3045,6 @@ body {
       </div><!-- end chat-solo-panel -->
     </div>
     <!-- 折叠恢复按钮 -->
-    <div id="nav-restore" onclick="toggleNav()" title="展开导航栏">▶</div>
     <div id="chat-restore" onclick="toggleChat()" title="展开聊天栏">◀</div>
   </div>
 </div>
@@ -6464,8 +6555,8 @@ const THEME_KEY = 'partnerfm-theme';
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  const use = document.querySelector('#theme-toggle use');
-  if (use) use.setAttribute('href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+  const label = document.getElementById('settings-theme-label');
+  if (label) label.textContent = theme === 'dark' ? '深色' : '浅色';
   try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
 }
 
@@ -6626,37 +6717,74 @@ init().catch(console.error);
 <script>
 // ========== 模块切换 ==========
 let activeModule = localStorage.getItem('partnerfm-module') || 'file';
+let activeConfigTab = localStorage.getItem('partnerfm-config-tab') || 'model';
+
+function switchConfigTab(tabName) {
+  activeConfigTab = tabName;
+  localStorage.setItem('partnerfm-config-tab', tabName);
+
+  // 切换子标签按钮样式
+  document.querySelectorAll('.config-subtab').forEach(b =>
+    b.classList.toggle('active', b.dataset.configTab === tabName)
+  );
+
+  // 切换面板显示
+  document.querySelectorAll('.config-panel').forEach(p => p.style.display = 'none');
+  const panel = document.getElementById('config-panel-' + tabName);
+  if (panel) panel.style.display = '';
+
+  // 将对应隐藏模块的内容搬进面板（仅在首次或内容为空时）
+  if (panel && !panel.dataset.loaded) {
+    panel.dataset.loaded = '1';
+    const source = document.getElementById(tabName + '-module');
+    if (source) {
+      while (source.firstChild) panel.appendChild(source.firstChild);
+    }
+  }
+
+  // 加载数据
+  if (tabName === 'model') { loadModelList(); loadEmbeddingConfig(); }
+  if (tabName === 'cli') { renderCliList(); loadCliList(); }
+  if (tabName === 'mcp') { renderMcpList(); loadMcpList(); }
+  if (tabName === 'agent') { loadAgentConfig(); }
+  if (tabName === 'skill') { loadSkillList(); }
+}
+
 function switchModule(name) {
   activeModule = name;
   localStorage.setItem('partnerfm-module', name);
-  document.querySelectorAll('.module-btn').forEach(b => b.classList.toggle('active', b.dataset.module === name));
+  // 同步顶栏分段控件
+  document.querySelectorAll('.header-seg').forEach(s => s.classList.toggle('active', s.dataset.module === name));
+  // 切换内容面板
   document.querySelectorAll('.module-content').forEach(c => c.classList.toggle('active', c.id === name + '-module'));
-  if (name === 'cli') { renderCliList(); loadCliList(); }
-  if (name === 'mcp') { renderMcpList(); loadMcpList(); }
-  if (name === 'role') loadRoleList();
-  if (name === 'agent') loadAgentConfig();
+  if (name === 'config') { switchConfigTab(activeConfigTab); return; }
   if (name === 'log') loadLogs();
-  if (name === 'usage') { bindUsageTabs(); loadUsage(); }
-  if (name === 'data') loadDataMonitor();
-  if (name === 'model') { loadModelList(); loadEmbeddingConfig(); }
+  if (name === 'usage') { loadAiMonitor(); }
 }
 
-// 启动时恢复上次的模块 + 预加载 CLI/MCP 数据
+// ========== 模块切换结束 ==========
+// 顶栏分段控件点击事件
+document.querySelectorAll('.header-seg').forEach(seg => {
+  seg.addEventListener('click', () => switchModule(seg.dataset.module));
+});
+// ========== 模块切换结束 ==========
 setTimeout(() => {
   try {
     const saved = localStorage.getItem('partnerfm-module');
-    if (saved && saved !== 'file' && document.getElementById(saved + '-module')) {
-      switchModule(saved);
+    // 旧模块名映射：model/cli/mcp/agent → config
+    const oldToNew = { model: 'config', cli: 'config', mcp: 'config', agent: 'config' };
+    const actual = oldToNew[saved] || saved;
+    if (actual && actual !== 'file' && document.getElementById(actual + '-module')) {
+      switchModule(actual);
     }
   } catch(e) { console.warn('模块恢复失败:', e.message); }
   // 后台预加载所有模块数据，切过去时秒渲染
   fetch('/api/cli').then(r => r.json()).then(d => { cliCache = d.items || {}; }).catch(() => {});
   fetch('/api/mcp').then(r => r.json()).then(d => { mcpConfig = d; mcpLoaded = true; }).catch(() => {});
   fetch('/api/mcp-status').then(r => r.json()).then(d => { mcpStatusCache = d.status || {}; }).catch(() => {});
-  fetch('/api/agents').then(r => r.json()).then(d => { agentConfig = d; }).catch(() => {});
-  fetch('/api/project-agents').then(r => r.json()).then(d => { projectAgentConfig = d; }).catch(() => {});
-  fetch('/api/usage?days=7').then(r => r.json()).then(d => { usageData = d; }).catch(() => {});
-  fetch('/api/data-platforms').then(r => r.json()).then(d => { dataPlatformConfig = d; }).catch(() => {});
+  fetch('/api/agents').then(r => r.json()).then(d => { agentConfig = d; populateAgentSelect(); }).catch(() => {});
+  fetch('/api/skills').then(r => r.json()).then(d => { skillConfig = d; }).catch(() => {});
+  fetch('/api/ai-monitor').then(r => r.json()).then(d => { aiMonitorData = d; }).catch(() => {});
   fetch('/api/embedding-config').then(r => r.json()).then(d => {
     document.getElementById('emb-provider').value = d.provider || '';
     document.getElementById('emb-key').value = d.api_key || '';
@@ -6668,8 +6796,9 @@ setTimeout(() => {
   }).catch(() => {});
 }, 100);
 
-document.querySelectorAll('.module-btn').forEach(b => {
-  b.addEventListener('click', () => switchModule(b.dataset.module));
+// 配置模块子标签切换
+document.querySelectorAll('.config-subtab').forEach(b => {
+  b.addEventListener('click', () => switchConfigTab(b.dataset.configTab));
 });
 
 // ========== 多模态输入：粘贴/拖拽图片到聊天框 ==========
@@ -6709,16 +6838,6 @@ document.querySelectorAll('.module-btn').forEach(b => {
   });
 })();
 
-// ========== 导航折叠 ==========
-let navCollapsed = false;
-function toggleNav() {
-  navCollapsed = !navCollapsed;
-  document.getElementById('module-nav').classList.toggle('collapsed', navCollapsed);
-  const use = document.querySelector('#nav-toggle use');
-  if (use) use.setAttribute('href', navCollapsed ? '#icon-chevron-right' : '#icon-chevron-left');
-  document.getElementById('nav-restore').classList.toggle('show', navCollapsed);
-}
-document.getElementById('nav-toggle').addEventListener('click', toggleNav);
 
 // ========== 聊天折叠 ==========
 let chatCollapsed = false;
@@ -6768,25 +6887,6 @@ document.addEventListener('fullscreenchange', onFullscreenChange);
   });
 })();
 
-// ========== 导航栏拖拽调整宽度 ==========
-(function() {
-  let isResizing = false, startX, startWidth;
-  const resizer = document.getElementById('nav-resizer');
-  const nav = document.getElementById('module-nav');
-  resizer.addEventListener('mousedown', (e) => {
-    isResizing = true; startX = e.clientX; startWidth = nav.offsetWidth;
-    document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-    const newWidth = Math.max(52, Math.min(200, startWidth + (e.clientX - startX)));
-    nav.style.width = newWidth + 'px';
-  });
-  document.addEventListener('mouseup', () => {
-    if (isResizing) { isResizing = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
-  });
-})();
-
 // ========== 侧边栏拖拽调整宽度 ==========
 (function() {
   let isResizing = false, startX, startWidth;
@@ -6812,27 +6912,27 @@ document.addEventListener('fullscreenchange', onFullscreenChange);
 // ========== 侧边栏折叠 ==========
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const btn = document.getElementById('sidebar-toggle-btn');
+  const restore = document.getElementById('sidebar-restore');
   const collapsed = sidebar.classList.toggle('collapsed');
-  btn.textContent = collapsed ? '▶' : '◀';
-  btn.title = collapsed ? '展开文件夹列表 (⌘B)' : '折叠文件夹列表 (⌘B)';
+  if (restore) restore.classList.toggle('show', collapsed);
   localStorage.setItem('partnerfm-sidebar-collapsed', collapsed ? '1' : '0');
 }
 
 // 初始化：恢复折叠状态
 (function() {
   const sidebar = document.getElementById('sidebar');
-  const btn = document.getElementById('sidebar-toggle-btn');
   const strip = document.getElementById('sidebar-expand-strip');
+  const hideBtn = document.getElementById('sidebar-hide-btn');
+  const restoreBtn = document.getElementById('sidebar-restore');
 
-  btn.addEventListener('click', toggleSidebar);
   strip.addEventListener('click', toggleSidebar);
+  if (hideBtn) hideBtn.addEventListener('click', toggleSidebar);
+  if (restoreBtn) restoreBtn.addEventListener('click', toggleSidebar);
 
   // 恢复持久化状态
   if (localStorage.getItem('partnerfm-sidebar-collapsed') === '1') {
     sidebar.classList.add('collapsed');
-    btn.textContent = '▶';
-    btn.title = '展开文件夹列表 (⌘B)';
+    if (restoreBtn) restoreBtn.classList.add('show');
   }
 })();
 
@@ -7394,10 +7494,7 @@ function loadModelList() {
   const container = document.getElementById('model-list');
   const pids = Object.keys(modelConfig.providers);
 
-  container.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <h2 style="font-size:22px;font-weight:700;margin:0">模型</h2>
-    <button class="add-model-btn" onclick="openAddProviderModal()" style="padding:9px 20px;font-size:13px">+ 添加 Provider</button>
-  </div>`;
+  container.innerHTML = '';
 
   if (pids.length === 0) {
     container.innerHTML += `<div style="text-align:center;padding:60px 0;color:var(--text-secondary)">
@@ -7834,6 +7931,13 @@ function onChatRoleChange() {
   if (wrap2) wrap2.classList.toggle('has-value', !!val);
   roleConfig.activeRole = val;
   saveRoleConfig();
+  // 选了角色后，清空智能体选择（角色和智能体互斥）
+  if (val) {
+    const agentSel = document.getElementById('chat-agent-select');
+    if (agentSel) agentSel.value = '';
+    const s = getActiveChat();
+    if (s) { s.agentId = null; saveChatSessions(); }
+  }
 }
 
 // Get current role's prompt for chat injection
@@ -7908,48 +8012,129 @@ function deleteRole(roleId) {
   renderRoleList();
 }
 
+// ========== 技能管理（SKILL.md 工作流指南）==========
+let skillConfig = { skills: [] };
+
+function loadSkillList() {
+  if (skillConfig && skillConfig.skills) { renderSkillList(); return; }
+  fetch('/api/skills').then(r => r.json()).then(d => { skillConfig = d; renderSkillList(); }).catch(() => {});
+}
+
+function renderSkillList() {
+  const container = document.getElementById('skill-list');
+  if (!container) return;
+  const skills = skillConfig.skills || [];
+  let html = '';
+  if (!skills.length) { html += '<div class="config-empty">暂无 Skill</div>'; container.innerHTML = html; return; }
+  for (const s of skills) {
+    const enabled = s.enabled !== false;
+    const preview = (s.content || '').replace(/\n/g, ' ').slice(0, 80);
+    html += '<div class="config-card">' +
+      '<div class="config-card-body">' +
+        '<h4>' + escapeHtml(s.name) + '</h4>' +
+        '<p>' + escapeHtml(s.description || '') + ' · <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-tertiary)">' + escapeHtml(preview) + '</span></p>' +
+      '</div>' +
+      '<div class="config-card-actions">' +
+        '<button onclick="openSkillModal(\'' + s.id + '\')">编辑</button>' +
+        '<button class="danger" onclick="deleteSkill(\'' + s.id + '\')">删除</button>' +
+        '<label class="toggle-switch">' +
+          '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' onchange="toggleSkill(\'' + s.id + '\', this.checked)">' +
+          '<span class="toggle-slider"></span>' +
+        '</label>' +
+      '</div>' +
+    '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function openSkillModal(editId) {
+  let s = null;
+  if (editId) { s = (skillConfig.skills || []).find(x => x.id === editId); if (!s) return; }
+  const html = '<div id="skill-modal" class="prompt-modal open" onclick="if(event.target===this)closeSkillModal()">' +
+    '<div class="pm-box" style="width:640px">' +
+      '<div class="pm-header"><h3>' + (s ? '编辑 Skill' : '添加 Skill') + '</h3><button class="pm-close" onclick="closeSkillModal()"><svg width="18" height="18"><use href="#icon-close"/></svg></button></div>' +
+      '<div class="pm-body">' +
+        '<div class="pm-field"><label class="pm-label">名称</label><input id="skill-name" value="' + escapeHtml(s ? s.name : '') + '" placeholder="Skill 名称，如：写文章"></div>' +
+        '<div class="pm-field"><label class="pm-label">描述</label><input id="skill-desc" value="' + escapeHtml(s ? s.description : '') + '" placeholder="一句话描述这个 Skill 的用途"></div>' +
+        '<div class="pm-field"><label class="pm-label">SKILL.md 内容（Markdown 格式的工作流指南）</label><textarea id="skill-content" rows="14" placeholder="## Skill 名称&#10;&#10;### 触发条件&#10;...&#10;&#10;### 工作流程&#10;1. ...&#10;2. ...&#10;&#10;### 输出格式&#10;..." style="width:100%;padding:10px 12px;font-size:12px;line-height:1.6;border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);resize:vertical">' + escapeHtml(s ? s.content : '') + '</textarea></div>' +
+      '</div>' +
+      '<div class="pm-footer" style="padding:0 24px 20px;display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn-cancel" onclick="closeSkillModal()" style="padding:8px 20px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;font-size:13px">取消</button>' +
+        '<button class="btn-primary" onclick="saveSkill(\'' + (editId || '') + '\')" style="padding:8px 20px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px">保存</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeSkillModal() {
+  const el = document.getElementById('skill-modal');
+  if (el) el.remove();
+}
+
+function saveSkill(editId) {
+  const name = document.getElementById('skill-name').value.trim();
+  const desc = document.getElementById('skill-desc').value.trim();
+  const content = document.getElementById('skill-content').value.trim();
+  if (!name) { alert('请输入 Skill 名称'); return; }
+  if (!content) { alert('请输入 SKILL.md 内容'); return; }
+  if (editId) {
+    const s = (skillConfig.skills || []).find(x => x.id === editId);
+    if (s) { s.name = name; s.description = desc; s.content = content; }
+  } else {
+    if (!skillConfig.skills) skillConfig.skills = [];
+    skillConfig.skills.push({ id: 'skill_' + Date.now(), name, description: desc, content, enabled: true });
+  }
+  saveSkillConfig();
+  closeSkillModal();
+  renderSkillList();
+}
+
+function deleteSkill(skillId) {
+  const s = (skillConfig.skills || []).find(x => x.id === skillId);
+  if (!s) return;
+  if (!confirm('确定删除「' + s.name + '」？')) return;
+  skillConfig.skills = skillConfig.skills.filter(x => x.id !== skillId);
+  saveSkillConfig();
+  renderSkillList();
+}
+
+function toggleSkill(skillId, enabled) {
+  const s = (skillConfig.skills || []).find(x => x.id === skillId);
+  if (s) { s.enabled = enabled; saveSkillConfig(); }
+}
+
+function saveSkillConfig() {
+  fetch('/api/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(skillConfig) }).catch(() => {});
+}
+
+// 获取所有启用 Skill 的内容（用于注入 system prompt）
+function getActiveSkillsPrompt() {
+  const skills = skillConfig.skills || [];
+  const enabled = skills.filter(s => s.enabled !== false);
+  if (!enabled.length) return '';
+  return '\n\n---\n以下是可用的工作流技能（Skill），当任务匹配时请按照对应 Skill 的流程执行：\n\n' +
+    enabled.map(s => '## ' + s.name + '\n' + s.content).join('\n\n');
+}
+
 // ========== Agent 智能体管理 ==========
 let agentConfig = { agents: [], activeAgentId: '' };
-let projectAgentConfig = { mappings: [], activeProjectId: '' };
 
 async function loadAgentConfig() {
   if (agentConfig.agents && agentConfig.agents.length > 0) {
-    renderAgentList(); renderProjectAgentTable(); bindAgentTabs(); return;
+    renderAgentList(); populateAgentSelect(); return;
   }
   try {
-    const [ar, pr] = await Promise.all([
-      fetch('/api/agents').then(r => r.json()),
-      fetch('/api/project-agents').then(r => r.json())
-    ]);
-    agentConfig = ar;
-    projectAgentConfig = pr;
+    agentConfig = await fetch('/api/agents').then(r => r.json());
   } catch(e) {
     agentConfig = { agents: [], activeAgentId: '' };
-    projectAgentConfig = { mappings: [], activeProjectId: '' };
   }
   renderAgentList();
-  renderProjectAgentTable();
-  bindAgentTabs();
-}
-
-function bindAgentTabs() {
-  document.querySelectorAll('.agent-tab').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.agent-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.agentTab;
-      document.getElementById('agent-tab-list').style.display = tab === 'list' ? '' : 'none';
-      document.getElementById('agent-tab-projects').style.display = tab === 'projects' ? '' : 'none';
-    };
-  });
+  populateAgentSelect();
 }
 
 function saveAgentConfig() {
   fetch('/api/agents', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(agentConfig) });
-}
-
-function saveProjectAgentConfig() {
-  fetch('/api/project-agents', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(projectAgentConfig) });
 }
 
 function renderAgentList() {
@@ -7957,22 +8142,20 @@ function renderAgentList() {
   if (!container) return;
   const agents = agentConfig.agents || [];
   if (!agents.length) {
-    container.innerHTML = '<div class="empty-state">暂无智能体，<a href="javascript:openAgentModal()" style="color:var(--accent)">点击创建</a></div>';
+    container.innerHTML = '<div class="config-empty">暂无智能体，<a href="javascript:openAgentModal()" style="color:var(--accent)">点击创建</a></div>';
     return;
   }
   let html = '';
   for (const a of agents) {
-    const statusCls = a.status === 'active' ? 'active' : 'paused';
-    const statusText = a.status === 'active' ? '活跃' : (a.status === 'paused' ? '暂停' : '归档');
     const toolCount = (a.tools || []).length;
-    html += '<div class="skill-card agent-card">' +
-      '<div class="skill-card-body">' +
-        '<h4>' + escapeHtml(a.name) + ' <span class="agent-model-tag">' + escapeHtml(a.modelId || '') + '</span></h4>' +
+    html += '<div class="config-card">' +
+      '<div class="config-card-body">' +
+        '<h4>' + escapeHtml(a.name) + ' <span class="config-card-tag neutral">' + escapeHtml(a.modelId || '') + '</span></h4>' +
         '<p>' + escapeHtml(a.description || '') + ' · ' + toolCount + ' 个工具 · 最多 ' + (a.maxIterations || 10) + ' 轮</p>' +
       '</div>' +
-      '<div class="skill-card-actions">' +
-        '<button class="skill-edit-btn" onclick="event.stopPropagation();openAgentModal(\'' + a.id + '\')" title="编辑"><svg width="14" height="14"><use href="#icon-edit"/></svg></button>' +
-        '<button class="skill-del-btn" onclick="event.stopPropagation();deleteAgent(\'' + a.id + '\')" title="删除">×</button>' +
+      '<div class="config-card-actions">' +
+        '<button onclick="event.stopPropagation();openAgentModal(\'' + a.id + '\')">编辑</button>' +
+        '<button class="danger" onclick="event.stopPropagation();deleteAgent(\'' + a.id + '\')">删除</button>' +
       '</div>' +
     '</div>';
   }
@@ -8042,7 +8225,7 @@ function openAgentModal(editId) {
         '<div class="pm-field"><label class="pm-label">产出目录</label><input id="agent-outdir" value="' + escapeHtml(a ? a.allowedOutputDir : '产出/通用') + '" placeholder="产出/通用"></div>' +
         '<div class="pm-field"><label class="pm-label">允许文件类型</label><div class="agent-check-group agent-ft-group">' + ftChecks + '</div></div>' +
         '<div class="pm-field"><label class="pm-label">最大迭代轮次</label><input id="agent-maxiter" type="number" value="' + (a ? a.maxIterations : 10) + '" min="1" max="30" style="width:80px"></div>' +
-        '<div class="pm-field"><label class="pm-label">Temperature: <span id="agent-temp-val">' + tempVal + '</span></label><input id="agent-temp" type="range" min="0" max="2" step="0.1" value="' + tempVal + '" oninput="document.getElementById(\'agent-temp-val\').textContent=this.value" style="width:100%"></div>' +
+        '<div class="pm-field"><label class="pm-label">随机度 (Temperature): <span id="agent-temp-val">' + tempVal + '</span></label><input id="agent-temp" type="range" min="0" max="2" step="0.1" value="' + tempVal + '" oninput="document.getElementById(\'agent-temp-val\').textContent=this.value" style="width:100%" title="0=精确稳定（写代码） 1=平衡 2=天马行空（写文案）"></div>' +
       '</div>' +
       '<div class="pm-footer" style="padding:0 24px 20px;display:flex;justify-content:flex-end;gap:8px">' +
         '<button class="btn-cancel" onclick="closeAgentModal()" style="padding:8px 20px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;font-size:13px">取消</button>' +
@@ -8113,6 +8296,7 @@ function saveAgent(editId) {
   saveAgentConfig();
   closeAgentModal();
   renderAgentList();
+  populateAgentSelect();
 }
 
 function deleteAgent(agentId) {
@@ -8121,17 +8305,10 @@ function deleteAgent(agentId) {
   if (!confirm('确定删除智能体「' + a.name + '」？此操作不可撤销。')) return;
   agentConfig.agents = agentConfig.agents.filter(x => x.id !== agentId);
   if (agentConfig.activeAgentId === agentId) agentConfig.activeAgentId = '';
-  // Also clean up project mappings
-  if (projectAgentConfig.mappings) {
-    for (const m of projectAgentConfig.mappings) {
-      m.agentIds = (m.agentIds || []).filter(id => id !== agentId);
-      if (m.defaultAgentId === agentId) m.defaultAgentId = '';
-    }
-    saveProjectAgentConfig();
-  }
   saveAgentConfig();
   renderAgentList();
   renderProjectAgentTable();
+  populateAgentSelect();
 }
 
 // ========== Project-Agent 映射表 ==========
@@ -8386,219 +8563,22 @@ function deleteCli(key) {
   }).then(() => renderCliList());
 }
 
-// ========== 用量统计 & AI 监控模块 ==========
-let usageData = null;
-let usageDays = 7;
-let usageDim = 'model'; // model | agent | date
+// ========== AI 监控模块 ==========
 let aiMonitorData = null;
+let usageDimension = 'tool';  // 'tool' | 'model'
 
-function formatTokens(n) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return String(n);
-}
-function formatCost(n) {
-  if (n >= 1) return '$' + n.toFixed(2);
-  if (n >= 0.01) return '$' + n.toFixed(4);
-  return '$' + n.toFixed(6);
-}
 
-// ---- Tab 切换绑定（自身用量 / 本机 AI 监控）----
-function bindUsageTabs() {
-  document.querySelectorAll('.usage-tab-btn').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.usage-tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.utab;
-      document.querySelectorAll('.usage-pane').forEach(p => p.classList.toggle('active', p.id === 'usage-pane-' + tab));
-      // 切到监控 Tab 时加载数据
-      if (tab === 'monitor' && !aiMonitorData) loadAiMonitor();
-    };
-  });
-}
 
-// ---- 维度切换绑定（按模型 / 按智能体 / 按日期）----
-function bindUsageDimBtns() {
-  document.querySelectorAll('.usage-dim-btn').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.usage-dim-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      usageDim = btn.dataset.dim;
-      renderUsageDetail();
-    };
-  });
-}
 
-// ---- 周期切换绑定 ----
-function bindUsagePeriodBtns() {
-  document.querySelectorAll('.usage-period-btn').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.usage-period-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      usageDays = parseInt(btn.dataset.period);
-      loadUsage();
-    };
-  });
-}
 
-// ---- 数据加载 ----
-async function loadUsage() {
-  if (usageData) { renderUsage(); return; }
-  try {
-    const r = await fetch('/api/usage?days=' + usageDays);
-    usageData = await r.json();
-  } catch(e) { usageData = null; }
-  renderUsage();
-}
 
-async function loadAiMonitor() {
-  try {
-    const r = await fetch('/api/ai-monitor');
-    aiMonitorData = await r.json();
-  } catch(e) { aiMonitorData = null; }
-  renderAiMonitor();
-}
-
-// ---- 自身用量渲染 ----
-// 彩色调色盘（对应模型/工具颜色）
-const USAGE_COLORS = ['#f97316','#8b5cf6','#3b82f6','#10b981','#ef4444','#06b6d4','#f59e0b','#ec4899','#6366f1','#14b8a6'];
-
-function renderUsage() {
-  bindUsagePeriodBtns();
-  bindUsageDimBtns();
-
-  const heroEl = document.getElementById('usage-hero');
-  const summaryEl = document.getElementById('usage-summary');
-  const detailEl = document.getElementById('usage-detail');
-
-  if (!usageData || !usageData.days) {
-    if (heroEl) heroEl.innerHTML = '';
-    if (summaryEl) summaryEl.innerHTML = '<div style="color:var(--text-tertiary);font-size:12px;padding:8px 0;grid-column:1/-1">暂无用量数据</div>';
-    if (detailEl) detailEl.innerHTML = '';
-    return;
-  }
-
-  // ---- Hero 卡：今日 / 最近一日数据 ----
-  const byDate = usageData.byDate || {};
-  const dates = Object.keys(byDate).sort();
-  const todayKey = dates[dates.length - 1] || '';
-  const todayData = byDate[todayKey] || {};
-  const todayTokens = todayData.tokens || 0;
-  const todayCost = todayData.cost || 0;
-
-  if (heroEl) {
-    const now = new Date();
-    const nowStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
-    const isToday = todayKey === nowStr;
-    heroEl.innerHTML =
-      '<div class="usage-hero">' +
-        '<div class="usage-hero-label">' +
-          '<span>' + (isToday ? '今日数据' : '最近一日') + '</span>' +
-          '<span class="usage-hero-date">' + (todayKey || '—') + '</span>' +
-        '</div>' +
-        '<div class="usage-hero-main">' +
-          '<span class="usage-hero-num">' + formatTokenNum(todayTokens) + '</span>' +
-          '<span class="usage-hero-unit">tokens</span>' +
-          '<span class="usage-hero-unit" style="color:var(--text-tertiary)">≈' + formatCost(todayCost) + '</span>' +
-        '</div>' +
-        '<div class="usage-hero-sub">' +
-          (isToday ? '<span class="usage-hero-dot"></span><span>实时数据</span>' : '<span>历史记录</span>') +
-        '</div>' +
-      '</div>';
-  }
-
-  // ---- 3 格汇总 ----
-  const totalCalls = Object.values(usageData.byModel || {}).reduce((s, v) => s + (v.calls || 0), 0);
-  if (summaryEl) {
-    summaryEl.innerHTML =
-      '<div class="usage-stat-cell">' +
-        '<div class="usage-stat-num">' + formatTokenNum(usageData.totalTokens) + '</div>' +
-        '<div class="usage-stat-label">总用量</div>' +
-      '</div>' +
-      '<div class="usage-stat-cell">' +
-        '<div class="usage-stat-num">' + formatCost(usageData.totalCost) + '</div>' +
-        '<div class="usage-stat-label">折合 Token 成本</div>' +
-      '</div>' +
-      '<div class="usage-stat-cell">' +
-        '<div class="usage-stat-num">' + usageData.days + '</div>' +
-        '<div class="usage-stat-label">活跃天数</div>' +
-      '</div>';
-  }
-
-  renderUsageDetail();
-}
-
-function renderUsageDetail() {
-  if (!usageData || !usageData.days) return;
-  const el = document.getElementById('usage-detail');
-
-  if (usageDim === 'model') {
-    el.innerHTML = renderRankList(usageData.byModel || {});
-  } else if (usageDim === 'agent') {
-    el.innerHTML = renderRankList(usageData.byAgent || {});
-  } else {
-    el.innerHTML = renderDailyChart(usageData.byDate || {});
-  }
-}
-
-// tokenrank 风格进度条列表
-function renderRankList(data) {
-  const keys = Object.keys(data).sort((a, b) => (data[b].tokens||0) - (data[a].tokens||0));
-  if (!keys.length) return '<span style="color:var(--text-tertiary);font-size:12px">无数据</span>';
-  const total = keys.reduce((s, k) => s + (data[k].tokens||0), 0) || 1;
-  const maxTokens = Math.max(...keys.map(k => data[k].tokens||0), 1);
-  let html = '<div class="usage-rank-list">';
-  keys.forEach((k, i) => {
-    const d = data[k];
-    const tokens = d.tokens || 0;
-    const pct = Math.max(Math.round((tokens / maxTokens) * 100), 2);
-    const sharePct = ((tokens / total) * 100).toFixed(1);
-    const color = USAGE_COLORS[i % USAGE_COLORS.length];
-    html +=
-      '<div class="usage-rank-row">' +
-        '<div class="usage-rank-name">' +
-          '<span class="usage-rank-dot" style="background:' + color + '"></span>' +
-          '<span class="usage-rank-label" title="' + escapeHtml(k) + '">' + escapeHtml(k) + '</span>' +
-        '</div>' +
-        '<div class="usage-rank-bar-wrap">' +
-          '<div class="usage-rank-bar-fill" style="width:' + pct + '%;background:' + color + '"></div>' +
-        '</div>' +
-        '<div class="usage-rank-right">' +
-          '<div class="usage-rank-val">' + formatTokenNum(tokens) + '</div>' +
-          '<div class="usage-rank-pct">' + sharePct + '%</div>' +
-        '</div>' +
-      '</div>';
-  });
-  html += '</div>';
-  return html;
-}
-
-// 每日柱状图
-function renderDailyChart(data) {
-  const dates = Object.keys(data).sort();
-  if (!dates.length) return '<span style="color:var(--text-tertiary);font-size:12px">无数据</span>';
-  const maxVal = Math.max(...dates.map(dt => data[dt].tokens||0), 1);
-  let bars = '';
-  dates.forEach(dt => {
-    const d = data[dt];
-    const tokens = d.tokens || 0;
-    const h = Math.max(Math.round((tokens / maxVal) * 100), 2);
-    const label = dt.slice(5); // MM-DD
-    const tip = dt + ': ' + formatTokenNum(tokens) + ' · ' + formatCost(d.cost||0);
-    bars +=
-      '<div class="usage-daily-col">' +
-        '<div class="usage-daily-tip">' + escapeHtml(tip) + '</div>' +
-        '<div class="usage-daily-bar" style="height:' + h + '%;background:var(--accent)"></div>' +
-        '<span class="usage-daily-lbl">' + label + '</span>' +
-      '</div>';
-  });
-  return '<div class="usage-daily-chart">' +
-    '<div class="usage-daily-title">每日用量趋势</div>' +
-    '<div class="usage-daily-bars">' + bars + '</div>' +
-  '</div>';
+function loadAiMonitor() {
+  if (aiMonitorData) { renderAiMonitor(); return; }
+  fetch('/api/ai-monitor').then(r => r.json()).then(d => { aiMonitorData = d; renderAiMonitor(); }).catch(() => { aiMonitorData = null; });
 }
 
 // ---- 本机 Token 用量总览（opentoken 数据）----
+const USAGE_COLORS = ['#f97316','#8b5cf6','#3b82f6','#10b981','#ef4444','#06b6d4','#f59e0b','#ec4899','#6366f1','#14b8a6'];
 const TOKEN_COLORS = ['#4A90D9', '#E67E22', '#27AE60', '#9B59B6', '#E74C3C', '#1ABC9C', '#F39C12', '#34495E', '#E91E63', '#00ACC1'];
 
 function formatTokenNum(n) {
@@ -8672,34 +8652,67 @@ function renderTokenOverview() {
       '<div class="usage-stat-label">峰值日' + (peak ? ' ' + peak.date.slice(5) : '') + '</div>' +
     '</div>' +
     '<div class="usage-stat-cell">' +
-      '<div class="usage-stat-num">' + tools.length + '</div>' +
-      '<div class="usage-stat-label">活跃工具数</div>' +
+      '<div class="usage-stat-num">' + (usageDimension === 'tool' ? tools.length : (tok.modelBreakdown || []).length) + '</div>' +
+      '<div class="usage-stat-label">' + (usageDimension === 'tool' ? '活跃工具数' : '活跃模型数') + '</div>' +
     '</div>' +
   '</div>';
 
-  // ---- 工具排行列表（tokenrank 风格）----
-  if (tools.length) {
-    html += '<div class="usage-rank-list">';
-    tools.forEach((t, i) => {
-      const pct = total > 0 ? (t.total / total * 100) : 0;
-      const barPct = Math.max(Math.round((t.total / maxTokens) * 100), 2);
-      const color = USAGE_COLORS[i % USAGE_COLORS.length];
-      const modelStr = (t.models || []).slice(0, 2).join(', ') + (t.models && t.models.length > 2 ? ' …' : '');
-      html += '<div class="usage-rank-row">' +
-        '<div class="usage-rank-name">' +
-          '<span class="usage-rank-dot" style="background:' + color + '"></span>' +
-          '<span class="usage-rank-label" title="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</span>' +
-        '</div>' +
-        '<div class="usage-rank-bar-wrap">' +
-          '<div class="usage-rank-bar-fill" style="width:' + barPct + '%;background:' + color + '"></div>' +
-        '</div>' +
-        '<div class="usage-rank-right">' +
-          '<div class="usage-rank-val">' + formatTokenNum(t.total) + '</div>' +
-          '<div class="usage-rank-pct">' + pct.toFixed(1) + '% · ' + (t.records||0) + ' 条</div>' +
-        '</div>' +
-      '</div>';
-    });
-    html += '</div>';
+  // ---- 维度切换按钮 ----
+  html += '<div class="usage-dim-bar">' +
+    '<button class="usage-dim-btn' + (usageDimension === 'tool' ? ' active' : '') + '" data-dim="tool">按工具</button>' +
+    '<button class="usage-dim-btn' + (usageDimension === 'model' ? ' active' : '') + '" data-dim="model">按模型</button>' +
+  '</div>';
+
+  // ---- 排行列表（按工具 / 按模型）----
+  if (usageDimension === 'tool') {
+    if (tools.length) {
+      html += '<div class="usage-rank-list">';
+      tools.forEach((t, i) => {
+        const pct = total > 0 ? (t.total / total * 100) : 0;
+        const barPct = Math.max(Math.round((t.total / maxTokens) * 100), 2);
+        const color = USAGE_COLORS[i % USAGE_COLORS.length];
+        html += '<div class="usage-rank-row">' +
+          '<div class="usage-rank-name">' +
+            '<span class="usage-rank-dot" style="background:' + color + '"></span>' +
+            '<span class="usage-rank-label" title="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</span>' +
+          '</div>' +
+          '<div class="usage-rank-bar-wrap">' +
+            '<div class="usage-rank-bar-fill" style="width:' + barPct + '%;background:' + color + '"></div>' +
+          '</div>' +
+          '<div class="usage-rank-right">' +
+            '<div class="usage-rank-val">' + formatTokenNum(t.total) + '</div>' +
+            '<div class="usage-rank-pct">' + pct.toFixed(1) + '% · ' + (t.records||0) + ' 条</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+  } else {
+    // 按模型排行
+    const models = (tok.modelBreakdown || []).slice().sort((a, b) => (b.total||0) - (a.total||0));
+    const maxModel = Math.max(1, ...models.map(m => m.total||0));
+    if (models.length) {
+      html += '<div class="usage-rank-list">';
+      models.forEach((m, i) => {
+        const pct = total > 0 ? (m.total / total * 100) : 0;
+        const barPct = Math.max(Math.round((m.total / maxModel) * 100), 2);
+        const color = USAGE_COLORS[i % USAGE_COLORS.length];
+        html += '<div class="usage-rank-row">' +
+          '<div class="usage-rank-name">' +
+            '<span class="usage-rank-dot" style="background:' + color + '"></span>' +
+            '<span class="usage-rank-label" title="' + escapeHtml(m.model) + '">' + escapeHtml(m.model) + '</span>' +
+          '</div>' +
+          '<div class="usage-rank-bar-wrap">' +
+            '<div class="usage-rank-bar-fill" style="width:' + barPct + '%;background:' + color + '"></div>' +
+          '</div>' +
+          '<div class="usage-rank-right">' +
+            '<div class="usage-rank-val">' + formatTokenNum(m.total) + '</div>' +
+            '<div class="usage-rank-pct">' + pct.toFixed(1) + '% · ' + (m.records||0) + ' 条</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
   }
 
   el.innerHTML = html;
@@ -8714,34 +8727,58 @@ function renderTokenHistory() {
   const byDate = (tok.byDate || []).slice();
   if (!byDate.length) { el.innerHTML = ''; return; }
 
-  // 工具列表按总量排序，取前 N 个（其余合并为"其他"）
-  const toolList = (tok.tools || []).slice().sort((a, b) => (b.total||0) - (a.total||0));
-  const maxTools = 8;
-  const topTools = toolList.slice(0, maxTools);
-  const otherToolIds = new Set(toolList.slice(maxTools).map(t => t.id));
-  const hasOther = otherToolIds.size > 0;
-
   const total = tok.grandTotal || 0;
   const peak = byDate.reduce((a, b) => b.tokens > a.tokens ? b : a, byDate[0]);
   const avg = Math.round(total / (tok.totalDays || byDate.length));
-
-  // 每日最大值（用于归一化）
   const maxVal = Math.max(1, ...byDate.map(d => d.tokens));
 
-  // 构建 per-tool byDate map
-  const toolByDate = {};
-  topTools.forEach(t => { toolByDate[t.id] = t.byDate || {}; });
-  let otherByDate = {};
-  if (hasOther) {
-    otherToolIds.forEach(tid => {
-      const ot = toolList.find(t => t.id === tid);
-      if (ot && ot.byDate) {
-        Object.entries(ot.byDate).forEach(([dt, v]) => {
-          otherByDate[dt] = (otherByDate[dt] || 0) + v;
-        });
-      }
-    });
+  const isTool = usageDimension === 'tool';
+  const maxItems = 8;
+
+  // 构建按维度分组的列表和 byDate 映射
+  let itemList, topItems, otherIds, hasOther, itemByDate, otherByDate;
+
+  if (isTool) {
+    itemList = (tok.tools || []).slice().sort((a, b) => (b.total||0) - (a.total||0));
+    topItems = itemList.slice(0, maxItems);
+    otherIds = new Set(itemList.slice(maxItems).map(t => t.id));
+    hasOther = otherIds.size > 0;
+    itemByDate = {};
+    topItems.forEach(t => { itemByDate[t.id] = t.byDate || {}; });
+    otherByDate = {};
+    if (hasOther) {
+      otherIds.forEach(tid => {
+        const ot = itemList.find(t => t.id === tid);
+        if (ot && ot.byDate) {
+          Object.entries(ot.byDate).forEach(([dt, v]) => {
+            otherByDate[dt] = (otherByDate[dt] || 0) + v;
+          });
+        }
+      });
+    }
+  } else {
+    // 按模型
+    itemList = (tok.modelBreakdown || []).slice().sort((a, b) => (b.total||0) - (a.total||0));
+    topItems = itemList.slice(0, maxItems);
+    const otherModels = new Set(itemList.slice(maxItems).map(m => m.model));
+    hasOther = otherModels.size > 0;
+    itemByDate = {};
+    topItems.forEach(m => { itemByDate[m.model] = m.byDate || {}; });
+    otherByDate = {};
+    if (hasOther) {
+      otherModels.forEach(mn => {
+        const om = itemList.find(m => m.model === mn);
+        if (om && om.byDate) {
+          Object.entries(om.byDate).forEach(([dt, v]) => {
+            otherByDate[dt] = (otherByDate[dt] || 0) + v;
+          });
+        }
+      });
+    }
   }
+
+  const getItemName = (item) => isTool ? item.name : item.model;
+  const getItemKey = (item) => isTool ? item.id : item.model;
 
   // ---- 堆叠柱状图 ----
   const bars = byDate.map((d, i) => {
@@ -8749,25 +8786,21 @@ function renderTokenHistory() {
     const labelTxt = showLabel ? d.date.slice(5) : '';
     let segs = '';
     let tipLines = [];
-    let bottomH = 100;
 
-    topTools.forEach((t, ti) => {
-      const val = (toolByDate[t.id] || {})[d.date] || 0;
+    topItems.forEach((item, ti) => {
+      const val = (itemByDate[getItemKey(item)] || {})[d.date] || 0;
       if (val > 0 && d.tokens > 0) {
         const h = Math.max(Math.round((val / maxVal) * 100), 1);
-        bottomH -= h;
         segs += '<div class="usage-stack-seg" style="height:' + h + '%;background:' + USAGE_COLORS[ti % USAGE_COLORS.length] + '"></div>';
         tipLines.push('<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + USAGE_COLORS[ti % USAGE_COLORS.length] + ';margin-right:3px;vertical-align:middle"></span>' +
-          escapeHtml(t.name) + ' ' + formatTokenNum(val));
+          escapeHtml(getItemName(item)) + ' ' + formatTokenNum(val));
       }
     });
 
-    // 其他
     if (hasOther) {
       const oVal = otherByDate[d.date] || 0;
       if (oVal > 0 && d.tokens > 0) {
         const h = Math.max(Math.round((oVal / maxVal) * 100), 1);
-        bottomH -= h;
         segs += '<div class="usage-stack-seg" style="height:' + h + '%;background:#94a3b8"></div>';
         tipLines.push('其他 ' + formatTokenNum(oVal));
       }
@@ -8784,10 +8817,10 @@ function renderTokenHistory() {
 
   // ---- 图例 ----
   let legendHtml = '<div class="usage-stack-legend">';
-  topTools.forEach((t, i) => {
+  topItems.forEach((item, i) => {
     legendHtml += '<div class="usage-stack-legend-item">' +
       '<span class="usage-stack-dot" style="background:' + USAGE_COLORS[i % USAGE_COLORS.length] + '"></span>' +
-      escapeHtml(t.name) +
+      escapeHtml(getItemName(item)) +
     '</div>';
   });
   if (hasOther) {
@@ -8797,8 +8830,8 @@ function renderTokenHistory() {
 
   // ---- 每日明细矩阵表格 ----
   let thead = '<tr><th>日期</th>';
-  topTools.forEach((t, i) => {
-    thead += '<th><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + USAGE_COLORS[i % USAGE_COLORS.length] + ';margin-right:4px"></span>' + escapeHtml(t.name) + '</th>';
+  topItems.forEach((item, i) => {
+    thead += '<th><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + USAGE_COLORS[i % USAGE_COLORS.length] + ';margin-right:4px"></span>' + escapeHtml(getItemName(item)) + '</th>';
   });
   if (hasOther) { thead += '<th>其他</th>'; }
   thead += '<th class="col-total">合计</th></tr>';
@@ -8807,8 +8840,8 @@ function renderTokenHistory() {
   let tbody = '';
   activeDays.forEach(d => {
     tbody += '<tr><td>' + d.date + '</td>';
-    topTools.forEach(t => {
-      const v = (toolByDate[t.id] || {})[d.date] || 0;
+    topItems.forEach(item => {
+      const v = (itemByDate[getItemKey(item)] || {})[d.date] || 0;
       tbody += v > 0 ? '<td class="has-val">' + formatTokenShort(v) + '</td>' : '<td class="zero">-</td>';
     });
     if (hasOther) {
@@ -8842,6 +8875,17 @@ function renderAiMonitor() {
   // 0) 本机 Token 用量总览（来自 opentoken）
   renderTokenOverview();
   renderTokenHistory();
+
+  // 绑定维度切换按钮
+  document.querySelectorAll('.usage-dim-btn').forEach(btn => {
+    btn.onclick = () => {
+      const dim = btn.dataset.dim;
+      if (dim && dim !== usageDimension) {
+        usageDimension = dim;
+        renderAiMonitor();
+      }
+    };
+  });
 }
 
 // ========== 操作日志模块 ==========
@@ -8916,14 +8960,17 @@ function renderLogList() {
     html += '<div class="log-entry" style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px">' +
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
         '<span class="' + statusCls + '" style="font-size:14px">' + statusIcon + '</span>' +
-        '<strong>' + escapeHtml(l.agentName || l.agentId) + '</strong>' +
-        '<span style="font-size:11px;color:var(--text-tertiary)">' + escapeHtml(l.modelId || '') + '</span>' +
+        '<strong>' + escapeHtml(l.agentName || l.engineName || l.agentId || l.engineId || '') + '</strong>' +
+        '<span style="font-size:11px;color:var(--text-tertiary)">' + escapeHtml(l.modelId || l.model || '') + '</span>' +
         '<span style="margin-left:auto;font-size:11px;color:var(--text-tertiary)">' + escapeHtml(l.timestamp || '') + '</span>' +
         '<span style="font-size:11px;color:var(--text-tertiary)">' + (l.duration != null ? l.duration + 's' : '') + '</span>' +
       '</div>' +
       (taskPreview ? '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">"' + escapeHtml(taskPreview) + (taskPreview.length >= 100 ? '...' : '') + '"</div>' : '') +
       '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-        '<span style="font-size:10px;color:var(--text-tertiary)">' + (l.iterations || 0) + ' 轮</span>' +
+        (l.iterations ? '<span style="font-size:10px;color:var(--text-tertiary)">' + l.iterations + ' 轮</span>' : '') +
+        (l.totalTokens ? '<span style="font-size:10px;color:var(--text-tertiary)">' + formatTokenNum(l.totalTokens) + ' tokens</span>' : '') +
+        (l.promptTokens != null ? '<span style="font-size:10px;color:var(--text-tertiary)">输入 ' + formatTokenNum(l.promptTokens) + '</span>' : '') +
+        (l.completionTokens != null ? '<span style="font-size:10px;color:var(--text-tertiary)">输出 ' + formatTokenNum(l.completionTokens) + '</span>' : '') +
         toolsHtml +
       '</div>' +
       (artifactsHtml ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">' + artifactsHtml + '</div>' : '') +
@@ -8932,253 +8979,6 @@ function renderLogList() {
     '</div>';
   }
   container.innerHTML = html;
-}
-
-// ========== 数据监测模块 ==========
-let dataPlatformConfig = null;
-let dataActiveChannel = 'douyin';
-let editingSourceId = null; // 当前正在编辑的数据源 id
-
-async function loadDataMonitor() {
-  if (dataPlatformConfig) {
-    renderSourceList(); renderDataChannelTabs();
-    const chs = dataPlatformConfig.channels || [];
-    if (chs.length) selectDataChannel(chs[0].id || chs[0]);
-    return;
-  }
-  try {
-    const resp = await fetch('/api/data-platforms');
-    dataPlatformConfig = await resp.json();
-  } catch (_) {
-    dataPlatformConfig = { sources: {}, active: '', channels: [] };
-  }
-  renderSourceList();
-  renderDataChannelTabs();
-  const chs = dataPlatformConfig.channels || [];
-  if (chs.length) selectDataChannel(chs[0].id || chs[0]);
-}
-
-// --- 数据源卡片列表 ---
-function renderSourceList() {
-  const sources = dataPlatformConfig?.sources || {};
-  const active = dataPlatformConfig?.active || '';
-  const ids = Object.keys(sources);
-  const container = document.getElementById('data-source-list');
-  if (!ids.length) {
-    container.innerHTML = '<div style="color:var(--text-tertiary);font-size:12px;padding:8px 0">暂无数据源，点击下方按钮添加</div>';
-    return;
-  }
-  container.innerHTML = ids.map(id => {
-    const s = sources[id];
-    const isActive = id === active;
-    const statusDot = isActive ? '<span title="当前使用" style="display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%;margin-right:4px"></span>' : '';
-    return `<div class="data-source-card" style="${isActive ? 'border-color:var(--accent);background:rgba(0,122,255,0.06)' : ''}">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px">${statusDot}${escapeHtml(s.name)} <code style="font-size:10px;color:var(--text-tertiary)">${id}</code></div>
-        <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.base_url || '未配置 URL')} · Key: ${s.api_key ? '***已设置' : '未设置'}</div>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        ${!isActive ? `<button class="data-src-btn" onclick="setActiveSource('${id}')">启用</button>` : '<span style="font-size:10px;color:var(--accent)">当前</span>'}
-        <button class="data-src-btn" onclick="openDataSourceModal('${id}')">编辑</button>
-        <button class="data-src-btn" style="color:#ff3b30" onclick="deleteDataSource('${id}')">删除</button>
-        <button class="data-src-btn" onclick="testSourceConnection('${id}')">🔌</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function setActiveSource(id) {
-  await fetch('/api/data-platforms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'set_active', source_id: id })
-  });
-  const resp = await fetch('/api/data-platforms');
-  dataPlatformConfig = await resp.json();
-  renderSourceList();
-}
-
-async function deleteDataSource(id) {
-  if (!confirm('删除数据源「' + (dataPlatformConfig.sources[id]?.name || id) + '」？')) return;
-  await fetch('/api/data-platforms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'delete_source', source_id: id })
-  });
-  const resp = await fetch('/api/data-platforms');
-  dataPlatformConfig = await resp.json();
-  renderSourceList();
-}
-
-async function testSourceConnection(id) {
-  // 临时设为活跃再测试
-  await fetch('/api/data-platforms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'set_active', source_id: id })
-  });
-  const st = document.getElementById('dp-status');
-  st.textContent = '测试中...';
-  try {
-    const resp = await fetch('/api/data-test', { method: 'POST' });
-    const data = await resp.json();
-    st.textContent = data.ok ? '✅ 连接成功！' : '⚠️ ' + (data.error || '无数据');
-  } catch (e) {
-    st.textContent = '❌ ' + e.message;
-  }
-  // 恢复原 active 并刷新
-  const r = await fetch('/api/data-platforms');
-  dataPlatformConfig = await r.json();
-  renderSourceList();
-}
-
-// --- 新增/编辑数据源弹窗 ---
-function openDataSourceModal(editId) {
-  editingSourceId = editId || null;
-  const src = editId ? (dataPlatformConfig?.sources || {})[editId] : null;
-  const title = editId ? '编辑数据源' : '新增数据源';
-  const idVal = src ? editId : '';
-  const nameVal = src?.name || '';
-  const urlVal = src?.base_url || '';
-  const keyVal = src?.api_key || '';
-  const html = `<div class="prompt-modal open" id="ds-modal" onclick="if(event.target===this)closeDsModal()">
-    <div class="pm-box">
-      <h3>${title}</h3>
-      <div style="display:grid;grid-template-columns:80px 1fr;gap:8px 10px;align-items:center;font-size:12px;margin-top:12px">
-        <label>ID</label><input id="ds-id" value="${idVal}" placeholder="英文ID" ${editId ? 'disabled' : ''} style="padding:5px 8px;border:1px solid var(--border);border-radius:5px">
-        <label>名称</label><input id="ds-name" value="${escapeHtml(nameVal)}" placeholder="RedFox" style="padding:5px 8px;border:1px solid var(--border);border-radius:5px">
-        <label>Base URL</label><input id="ds-url" value="${escapeHtml(urlVal)}" placeholder="https://api.redfox.hk/v1" style="padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-family:var(--font-mono)">
-        <label>API Key</label><input id="ds-key" type="password" value="${escapeHtml(keyVal)}" placeholder="sk-..." style="padding:5px 8px;border:1px solid var(--border);border-radius:5px">
-      </div>
-      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="closeDsModal()" style="padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);cursor:pointer">取消</button>
-        <button class="prompt-add-btn" onclick="saveDataSource()">💾 保存</button>
-      </div>
-    </div>
-  </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function closeDsModal() {
-  document.getElementById('ds-modal')?.remove();
-  editingSourceId = null;
-}
-
-async function saveDataSource() {
-  const id = document.getElementById('ds-id').value.trim();
-  const source = {
-    name: document.getElementById('ds-name').value.trim(),
-    base_url: document.getElementById('ds-url').value.trim(),
-    api_key: document.getElementById('ds-key').value.trim()
-  };
-  if (!id || !source.name) { alert('ID 和名称必填'); return; }
-  if (!/^[a-zA-Z0-9_-]+$/.test(id)) { alert('ID 只能包含英文、数字、下划线和连字符'); return; }
-  await fetch('/api/data-platforms', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ op: 'save_source', source_id: id, source })
-  });
-  closeDsModal();
-  const resp = await fetch('/api/data-platforms');
-  dataPlatformConfig = await resp.json();
-  // 新增后自动设为活跃
-  if (!dataPlatformConfig.active || !dataPlatformConfig.sources[dataPlatformConfig.active]) {
-    await fetch('/api/data-platforms', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'set_active', source_id: id })
-    });
-    dataPlatformConfig.active = id;
-  }
-  renderSourceList();
-}
-
-function renderDataChannelTabs() {
-  const container = document.getElementById('data-channel-tabs');
-  const chs = dataPlatformConfig?.channels || [];
-  container.innerHTML = chs.map(c => {
-    const id = typeof c === 'string' ? c : c.id;
-    const name = typeof c === 'string' ? c : (c.name || c.id);
-    const active = id === dataActiveChannel ? ' style="background:var(--accent);color:#fff;border-color:var(--accent)"' : ' style="border:1px solid var(--border)"';
-    return `<button class="data-channel-tab" data-channel="${id}"${active} onclick="selectDataChannel('${id}')">${name}</button>`;
-  }).join('');
-}
-
-function selectDataChannel(channel) {
-  dataActiveChannel = channel;
-  renderDataChannelTabs();
-  document.getElementById('data-results').innerHTML = '';
-}
-
-async function dataSearch(action) {
-  const keyword = document.getElementById('data-search-input').value.trim();
-  if (!keyword) { alert('请输入搜索关键词'); return; }
-  const resultsDiv = document.getElementById('data-results');
-  resultsDiv.innerHTML = '<div style="color:var(--text-tertiary);padding:20px">搜索中...</div>';
-  try {
-    const resp = await fetch('/api/data-proxy', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel: dataActiveChannel, action, params: { keyword } })
-    });
-    const result = await resp.json();
-    if (result.ok && result.data) {
-      renderDataResults(result.data);
-    } else {
-      resultsDiv.innerHTML = `<div style="color:#ff3b30;padding:20px">${result.error || '无结果'}</div>`;
-    }
-  } catch (e) {
-    resultsDiv.innerHTML = `<div style="color:#ff3b30;padding:20px">请求失败：${e.message}</div>`;
-  }
-}
-
-async function loadHotList() {
-  const resultsDiv = document.getElementById('data-results');
-  resultsDiv.innerHTML = '<div style="color:var(--text-tertiary);padding:20px">加载中...</div>';
-  try {
-    const resp = await fetch('/api/data-proxy', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel: dataActiveChannel, action: 'hot_list' })
-    });
-    const result = await resp.json();
-    if (result.ok && result.data) {
-      renderDataResults(result.data);
-    } else {
-      resultsDiv.innerHTML = `<div style="color:#ff3b30;padding:20px">${result.error || '暂无数据'}</div>`;
-    }
-  } catch (e) {
-    resultsDiv.innerHTML = `<div style="color:#ff3b30;padding:20px">请求失败：${e.message}</div>`;
-  }
-}
-
-function renderDataResults(items) {
-  const container = document.getElementById('data-results');
-  if (!items || (Array.isArray(items) && !items.length)) {
-    container.innerHTML = '<div style="color:var(--text-tertiary);padding:20px">暂无结果</div>';
-    return;
-  }
-  const list = Array.isArray(items) ? items : (items.list || items.items || [items]);
-  container.innerHTML = list.slice(0, 30).map(item => {
-    const title = item.title || item.name || item.nickname || item.question || '—';
-    const desc = item.description || item.desc || item.summary || item.bio || '';
-    const extra = [];
-    if (item.followers || item.fans) extra.push(`粉丝 ${formatDataNum(item.followers || item.fans)}`);
-    if (item.likes || item.digg_count) extra.push(`👍 ${formatDataNum(item.likes || item.digg_count)}`);
-    if (item.views || item.play_count) extra.push(`👁 ${formatDataNum(item.views || item.play_count)}`);
-    if (item.author || item.owner?.name) extra.push(`作者 ${item.author || item.owner?.name}`);
-    if (item.platform || item.source) extra.push(item.platform || item.source);
-    const avatar = item.avatar || item.cover || item.image || '';
-    return `<div class="data-result-card">
-      ${avatar ? `<img class="data-result-avatar" src="${avatar}" onerror="this.style.display='none'">` : ''}
-      <div class="data-result-body">
-        <div class="data-result-title">${escapeHtml(String(title))}</div>
-        ${desc ? `<div class="data-result-desc">${escapeHtml(String(desc).slice(0, 200))}</div>` : ''}
-        ${extra.length ? `<div class="data-result-meta">${extra.join(' · ')}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function formatDataNum(n) {
-  if (n == null) return '0';
-  n = Number(n);
-  if (n >= 100000000) return (n / 100000000).toFixed(1) + '亿';
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
-  return String(n);
 }
 
 // ========== MCP 服务器管理 ==========
@@ -9463,6 +9263,12 @@ function switchChatSession(id) {
   // 恢复模型选择器
   const modelSel = document.getElementById('chat-model-select');
   if (modelSel) modelSel.value = (s && s.modelId) ? s.modelId : '';
+  // 恢复 Agent 选择器
+  const agentSel = document.getElementById('chat-agent-select');
+  if (agentSel) agentSel.value = (s && s.agentId) ? s.agentId : '';
+  // 恢复角色选择器
+  const roleSel = document.getElementById('chat-role-select');
+  if (roleSel && roleConfig) roleSel.value = roleConfig.activeRole || '';
   renderChatUI();
   // 切换对话后刷新发送按钮（不同对话可能一个在跑、一个没跑）
   refreshSendBtnUI();
@@ -9475,6 +9281,67 @@ function onChatModelChange() {
   if (wrap) wrap.classList.toggle('has-value', !!val);
   const s = getActiveChat();
   if (s) { s.modelId = val; saveChatSessions(); }
+}
+
+// ========== Agent 选择器 ==========
+function populateAgentSelect() {
+  const sel = document.getElementById('chat-agent-select');
+  if (!sel) return;
+  const agents = agentConfig.agents || [];
+  let html = '<option value="">选择智能体</option>';
+  for (const a of agents) {
+    if (a.status !== 'active') continue;
+    html += '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.name) + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
+function onChatAgentChange() {
+  const sel = document.getElementById('chat-agent-select');
+  const val = sel.value;
+  const wrap = document.getElementById('agent-selector-wrap');
+  if (wrap) wrap.classList.toggle('has-value', !!val);
+  const s = getActiveChat();
+  if (s) { s.agentId = val || null; saveChatSessions(); }
+  if (val) {
+    // 自动切换到智能体绑定的模型
+    resolveAgentModel(val);
+  }
+}
+
+async function resolveAgentModel(agentId) {
+  if (!agentId) return;
+  const agent = (agentConfig.agents || []).find(a => a.id === agentId);
+  if (!agent || !agent.provider || !agent.modelId) return;
+  try {
+    const data = await getEngineModelMap();
+    const engines = data.engines || {};
+    // agent.provider 对应 engineId，如 "deepseek"
+    const engine = engines[agent.provider];
+    if (!engine) return;
+    // 找到匹配的模型
+    const engineModels = engine.models || {};
+    let foundModelId = null;
+    for (const [mid, meta] of Object.entries(engineModels)) {
+      if (mid === agent.modelId) { foundModelId = mid; break; }
+    }
+    if (foundModelId) {
+      const modelSel = document.getElementById('chat-model-select');
+      if (modelSel) modelSel.value = agent.provider + '/' + foundModelId;
+      const s = getActiveChat();
+      if (s) { s.modelId = agent.provider + '/' + foundModelId; saveChatSessions(); }
+      // 更新模型选择器高亮
+      const mwrap = document.getElementById('model-selector-wrap');
+      if (mwrap) mwrap.classList.add('has-value');
+    }
+  } catch(e) { console.warn('解析 Agent 模型失败:', e.message); }
+}
+
+function getActiveAgentPrompt() {
+  const s = getActiveChat();
+  if (!s || !s.agentId) return '';
+  const agent = (agentConfig.agents || []).find(a => a.id === s.agentId);
+  return (agent && agent.systemPrompt) ? agent.systemPrompt : '';
 }
 
 // 添加到对话（右键菜单调用）—— 同时自动匹配工作区路径
@@ -10020,9 +9887,13 @@ async function sendChat() {
     session.messages.push({ role: 'user', content: userContent });
 
     const messages = [];
-    // Build system message from active role
-    const rolePrompt = getActiveRolePrompt();
-    systemContent = rolePrompt || '';
+    // Build system message: Agent systemPrompt + 技能 prompt
+    const agentPrompt = getActiveAgentPrompt();
+    const skillsPrompt = getActiveSkillsPrompt();
+    systemContent = agentPrompt || '你是一个智能助手，是用户的主 Agent。你可以调用其他专业智能体来协作完成任务。请用中文回复。';
+    if (skillsPrompt) {
+      systemContent = (systemContent ? systemContent + '\n' : '') + skillsPrompt;
+    }
 
     if (ctxText) {
       const prefix = systemContent ? '\n\n---\n以下文件/文件夹内容供参考：\n\n' : '以下文件/文件夹内容供参考：\n\n';
@@ -10041,6 +9912,8 @@ async function sendChat() {
     if (isEngineMode) {
       // ===== 通用引擎模式 =====
       const etype = engineCfg.type || 'rest';
+      // 有工作区或文件上下文时，走 Agent 模式
+      const useAgent = !!(workspace || ctxHasFiles);
       const endpoint = '/api/chat?engine=' + encodeURIComponent(engineId);
 
       // 标准化请求体
@@ -10049,8 +9922,10 @@ async function sendChat() {
         model: modelId,
         messages,
         workspace: workspace || undefined,
-        options: { maxTurns: 20 }
+        options: { maxTurns: 20 },
+        forceAgent: useAgent || undefined
       };
+      if (session.agentId) body.agentId = session.agentId;
 
       const resp = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -10061,7 +9936,7 @@ async function sendChat() {
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         addChatMessage('error', '❌ ' + (err.error || '请求失败 ' + resp.status), true);
-      } else if (etype === 'agent') {
+      } else if (useAgent || etype === 'agent') {
         await handleAgentStream(resp, session, abortSignal);
         checkFileChanges();
       } else {
@@ -10079,6 +9954,7 @@ async function sendChat() {
       const endpoint = useAgent ? '/api/agent' : '/api/chat';
       const body = { api_key: model.key, base_url: model.url, model: model.mid, messages };
       if (workspace) body.workspace = workspace;
+      if (session.agentId) body.agentId = session.agentId;
 
       const resp = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -10703,6 +10579,10 @@ function renderChatUI() {
     if (modelSel) modelSel.value = s.modelId || '';
     const wrap = document.getElementById('model-selector-wrap');
     if (wrap) wrap.classList.toggle('has-value', !!s.modelId);
+    const agentSel = document.getElementById('chat-agent-select');
+    if (agentSel) agentSel.value = s.agentId || '';
+    const agentWrap = document.getElementById('agent-selector-wrap');
+    if (agentWrap) agentWrap.classList.toggle('has-value', !!s.agentId);
   }
 }
 
@@ -10755,7 +10635,6 @@ function updateChatContext() {
 // ========== 启动 ==========
 loadModelConfig();
 refreshModelSelect();
-loadRoleList();
 loadChatSessions();
 
 
