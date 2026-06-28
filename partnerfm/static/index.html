@@ -835,25 +835,25 @@ body {
 }
 .md-toolbar .md-mode-btn:hover { background: var(--bg-hover); }
 .md-toolbar .md-mode-btn.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border);
 }
 .md-toolbar .md-save-btn {
   padding: 4px 12px;
   font-size: 12px;
   border-radius: 4px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
   cursor: pointer;
   font-family: var(--font);
   font-weight: 500;
   margin-left: auto;
   transition: all 0.1s;
 }
-.md-toolbar .md-save-btn:hover { background: var(--accent-hover); }
-.md-toolbar .md-save-btn.saved { background: #34c759; }
+.md-toolbar .md-save-btn:hover { background: var(--bg-hover); }
+.md-toolbar .md-save-btn.saved { color: #34c759; border-color: #34c759; }
 .md-toolbar .md-modified {
   font-size: 11px;
   color: var(--text-tertiary);
@@ -1494,7 +1494,7 @@ body {
   overflow: hidden;
   user-select: none;
 }
-.ss-canvas-stage img { display: block; max-width: 100%; max-height: 70vh; pointer-events: none; }
+.ss-canvas-stage img { display: block; max-width: 100%; max-height: 100%; pointer-events: none; }
 /* 遮罩：选框外的区域半透明 */
 .ss-mask {
   position: absolute;
@@ -2668,6 +2668,7 @@ body {
     </div>
     <div class="header-segments">
       <button class="header-seg active" data-module="file">项目</button>
+      <button class="header-seg" data-module="board">看板</button>
       <button class="header-seg" data-module="config">配置</button>
       <button class="header-seg" data-module="usage">用量</button>
       <button class="header-seg" data-module="log">日志</button>
@@ -2781,6 +2782,21 @@ body {
               <button id="fullscreen-btn" title="全屏展示 (⌘⇧F)"><svg width="16" height="16"><use href="#icon-fullscreen"/></svg></button>
               <span id="status-right"></span>
             </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 看板模块（占位） -->
+      <div id="board-module" class="module-content">
+        <div class="mgmt-panel">
+          <div class="page-header">
+            <h2>看板</h2>
+            <p>以项目为维度聚合工作流，敬请期待。</p>
+          </div>
+          <div class="empty-state" style="padding:64px 24px;text-align:center">
+            <div style="font-size:40px;margin-bottom:12px">📋</div>
+            <div style="font-size:15px;color:var(--text-secondary);margin-bottom:4px">看板功能开发中</div>
+            <div style="font-size:13px;color:var(--text-tertiary)">按项目聚合 AI 工作流、Token 归因与阶段复盘</div>
           </div>
         </div>
       </div>

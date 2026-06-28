@@ -13,7 +13,43 @@
  */
 
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { query } from '@tencent-ai/agent-sdk';
+
+// ---------- 加载 .env ----------
+// 手动解析同目录下的 .env，注入到 process.env
+// （不依赖 dotenv，避免额外安装；已存在的环境变量优先级更高）
+{
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const envPath = join(__dirname, '.env');
+  try {
+    const envContent = readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;        // 空行 / 注释
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      // 去掉两端成对引号
+      if ((val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      // 已存在的环境变量优先（shell 里 export 的值不被 .env 覆盖）
+      if (!(key in process.env)) process.env[key] = val;
+    }
+    console.log(`[WorkBuddy Sidecar] 已加载 .env`);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.warn(`[WorkBuddy Sidecar] ⚠️ 未找到 .env 文件，将仅使用环境变量`);
+    } else {
+      console.warn(`[WorkBuddy Sidecar] ⚠️ 解析 .env 失败：${err.message}`);
+    }
+  }
+}
 
 const PORT = parseInt(process.env.WORKBUDDY_SIDECAR_PORT || '9876', 10);
 const HOST = process.env.WORKBUDDY_SIDECAR_HOST || '127.0.0.1';
@@ -291,6 +327,27 @@ async function handleRequest(req, res) {
   // ----- 404 fallback -----
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'not found' }));
+}
+
+// ---------- 启动前校验认证 ----------
+
+{
+  const apiKey = process.env.CODEBUDDY_API_KEY;
+  const PLACEHOLDERS = ['PASTE_YOUR_API_KEY_HERE', 'your-api-key-here', 'your_api_key_here', ''];
+  if (!apiKey || PLACEHOLDERS.includes(apiKey)) {
+    console.error('');
+    console.error('╔══════════════════════════════════════════════════════════════╗');
+    console.error('║  ❌ WorkBuddy Sidecar 启动失败：未配置 API Key                ║');
+    console.error('╠══════════════════════════════════════════════════════════════╣');
+    console.error('║  请编辑 workbuddy-sidecar/.env，把：                         ║');
+    console.error('║     CODEBUDDY_API_KEY=PASTE_YOUR_API_KEY_HERE               ║');
+    console.error('║  替换为你的真实访问密钥，然后重新运行：                         ║');
+    console.error('║     node server.js                                          ║');
+    console.error('╚══════════════════════════════════════════════════════════════╝');
+    console.error('');
+    process.exit(1);
+  }
+  console.log(`[WorkBuddy Sidecar] ✅ 已检测到 CODEBUDDY_API_KEY`);
 }
 
 // ---------- 启动服务器 ----------
