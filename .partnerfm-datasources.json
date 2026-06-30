@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "datasources": {
+    "feishu_1782733489473": {
+      "name": "小红书运营测试",
+      "type": "feishu",
+      "credentialId": "我的飞书",
+      "appToken": "YV4jb0LyCaI8Yds7u9iciNxPncg",
+      "tableId": "tblNS6cORPKgYi9i",
+      "sourceUrl": "",
+      "createdAt": "2026-06-29T11:44:49Z",
+      "updatedAt": "2026-06-29T11:44:51Z",
+      "boundFolders": [],
+      "dateField": "时间",
+      "displayFields": [
+        "时间",
+        "点赞",
+        "收藏",
+        "当前关注数",
+        "收入"
+      ],
+      "rawData": [
+        {
+          "时间": "2026-06-29",
+          "点赞": 11,
+          "收藏": 2,
+          "当前关注数": 333,
+          "收入": 9
+        },
+        {
+          "时间": "2026-06-28",
+          "点赞": 5,
+          "收藏": 5,
+          "当前关注数": 321,
+          "收入": 1
+        }
+      ],
+      "lastSyncAt": "2026-06-29T11:44:51Z"
+    }
+  }
+}

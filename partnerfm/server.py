@@ -63,9 +63,27 @@ INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
 AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
 PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
 LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
+TIMING_FILE = os.path.join(DATA_DIR, '.partnerfm-timing.txt')
 USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
 TRACKS_FILE = os.path.join(DATA_DIR, '.partnerfm-tracks.json')
 PROJECTS_FILE = os.path.join(DATA_DIR, '.partnerfm-projects.json')
+
+# ===== 飞书凭证配置 =====
+FEISHU_CREDENTIALS_FILE = os.path.join(DATA_DIR, '.partnerfm-feishu-credentials.json')
+
+# ===== 数据源注册表 =====
+DATASOURCES_FILE = os.path.join(DATA_DIR, '.partnerfm-datasources.json')
+
+# ===== 看板配置（按项目隔离）=====
+DASHBOARD_DIR = os.path.join(DATA_DIR, 'dashboards')
+DEFAULT_DASHBOARD_CONFIG = {
+    'projectName': '',
+    'projectPath': '',
+    'datasources': [],
+    'cards': [],
+    'analyses': []
+}
+
 HOST = '127.0.0.1'
 PORT = 8765
 
@@ -351,6 +369,7 @@ class McpClient:
 # Global MCP client registry: {server_id: McpClient}
 _mcp_clients = {}
 _mcp_clients_lock = threading.Lock()
+_MCP_TOOLS_CACHE = {}  # {'key': config_hash, 'ts': timestamp, 'results': {...}}
 
 
 def _get_mcp_client(server_id, command):
@@ -496,7 +515,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.7,
-            "tools": ["list_dir", "read_file", "write_file", "search_files", "semantic_search", "web_search", "web_fetch", "file_stats", "recent_files", "run_shell"],
+            "tools": ["list_dir", "read_file", "write_file", "edit_file", "search_files", "semantic_search", "web_search", "web_fetch", "file_stats", "recent_files", "run_shell"],
             "allowedOutputDir": "产出/通用",
             "allowedFileTypes": [".md", ".html", ".txt", ".json", ".csv", ".svg", ".png", ".jpg"],
             "maxIterations": 10,
@@ -510,7 +529,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.3,
-            "tools": ["list_dir", "read_file", "write_file", "search_files", "web_search", "web_fetch", "semantic_search", "run_shell"],
+            "tools": ["list_dir", "read_file", "write_file", "edit_file", "search_files", "web_search", "web_fetch", "semantic_search", "run_shell"],
             "allowedOutputDir": "产出/代码",
             "allowedFileTypes": [".md", ".html", ".js", ".py", ".ts", ".json", ".css"],
             "maxIterations": 15,
@@ -524,7 +543,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.7,
-            "tools": ["read_file", "write_file", "search_files", "web_search"],
+            "tools": ["read_file", "write_file", "edit_file", "search_files", "web_search"],
             "allowedOutputDir": "产出/文案",
             "allowedFileTypes": [".md", ".html", ".txt"],
             "maxIterations": 10,
@@ -538,7 +557,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.5,
-            "tools": ["write_file", "read_file"],
+            "tools": ["write_file", "edit_file", "read_file"],
             "allowedOutputDir": "产出/图表",
             "allowedFileTypes": [".svg", ".html", ".md"],
             "maxIterations": 8,
@@ -552,7 +571,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.2,
-            "tools": ["list_dir", "read_file", "write_file", "search_files", "semantic_search", "web_search"],
+            "tools": ["list_dir", "read_file", "write_file", "edit_file", "search_files", "semantic_search", "web_search"],
             "allowedOutputDir": "产出/数据",
             "allowedFileTypes": [".md", ".csv", ".json", ".html"],
             "maxIterations": 12,
@@ -566,7 +585,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.8,
-            "tools": ["write_file", "read_file", "search_files"],
+            "tools": ["write_file", "edit_file", "read_file", "search_files"],
             "allowedOutputDir": "产出/文案",
             "allowedFileTypes": [".md", ".html", ".txt"],
             "maxIterations": 8,
@@ -580,7 +599,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.3,
-            "tools": ["write_file", "read_file"],
+            "tools": ["write_file", "edit_file", "read_file"],
             "allowedOutputDir": "产出/翻译",
             "allowedFileTypes": [".md", ".txt"],
             "maxIterations": 5,
@@ -594,7 +613,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.7,
-            "tools": ["write_file", "read_file", "search_files"],
+            "tools": ["write_file", "edit_file", "read_file", "search_files"],
             "allowedOutputDir": "产出/教程",
             "allowedFileTypes": [".md", ".html"],
             "maxIterations": 10,
@@ -608,7 +627,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.5,
-            "tools": ["write_file", "read_file", "search_files", "semantic_search"],
+            "tools": ["write_file", "edit_file", "read_file", "search_files", "semantic_search"],
             "allowedOutputDir": "产出/知识库",
             "allowedFileTypes": [".md", ".txt", ".json"],
             "maxIterations": 10,
@@ -622,7 +641,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.5,
-            "tools": ["read_file", "write_file", "search_files"],
+            "tools": ["read_file", "write_file", "edit_file", "search_files"],
             "allowedOutputDir": "产出/阅读",
             "allowedFileTypes": [".md", ".txt"],
             "maxIterations": 8,
@@ -636,7 +655,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.8,
-            "tools": ["write_file", "read_file", "web_search"],
+            "tools": ["write_file", "edit_file", "read_file", "web_search"],
             "allowedOutputDir": "产出/选题",
             "allowedFileTypes": [".md"],
             "maxIterations": 8,
@@ -650,7 +669,7 @@ DEFAULT_AGENTS = {
             "modelId": "deepseek-chat",
             "provider": "deepseek",
             "temperature": 0.7,
-            "tools": ["read_file", "write_file"],
+            "tools": ["read_file", "write_file", "edit_file"],
             "allowedOutputDir": "产出/优化",
             "allowedFileTypes": [".md", ".txt"],
             "maxIterations": 6,
@@ -1731,6 +1750,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.do_GET()
 
     def do_GET(self):
+        # self.path 可能包含完整 URL，提取纯路径
+        if '://' in self.path:
+            from urllib.parse import urlparse
+            self.path = urlparse(self.path).path
         # 根路径和 index.html 从包内 static/ 目录提供
         if self.path in ('/', '/index.html'):
             return self._serve_static('index.html')
@@ -1754,6 +1777,9 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json(_load_json(SKILLS_FILE, DEFAULT_SKILLS))
         if self.path == '/api/roles':
             return self._serve_json(_load_json(ROLES_FILE, DEFAULT_ROLES))
+        # 看板配置（按项目隔离）
+        if self.path.startswith('/api/dashboard/config'):
+            return self._handle_dashboard_config_get()
         # Agent 文件变更红点通知
         if self.path == '/api/file-changes':
             from urllib.parse import urlparse, parse_qs
@@ -1774,7 +1800,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json({'ok': True})
         if self.path == '/api/agent-config':
             return self._serve_json({
-                'tools': ['list_dir', 'read_file', 'write_file', 'search_files',
+                'tools': ['list_dir', 'read_file', 'write_file', 'edit_file', 'search_files',
                           'semantic_search', 'file_stats', 'recent_files',
                           'web_search', 'web_fetch', 'invoke_agent', 'run_shell'],
                 'max_iterations': 10
@@ -1898,9 +1924,23 @@ class Handler(SimpleHTTPRequestHandler):
             return self._serve_json({'ok': True})
         if self.path == '/api/engines':
             return self._serve_engines()
+        if self.path.startswith('/api/datasources'):
+            if self.path.startswith('/api/datasources/bind'):
+                self.send_error(405)  # Method not allowed for GET
+                return
+            if self.command == 'DELETE':
+                return self._handle_datasources_delete()
+            return self._handle_datasources()
+        if self.path == '/api/feishu-credentials':
+            return self._handle_feishu_credentials_get()
         return super().do_GET()
 
     def do_POST(self):
+        # self.path 可能包含完整 URL（如 http://127.0.0.1:8765/api/datasources），提取纯路径
+        if '://' in self.path:
+            from urllib.parse import urlparse
+            self.path = urlparse(self.path).path
+
         if self.path == '/api/state':
             return self._save_json_endpoint(STATE_FILE)
         if self.path == '/api/models':
@@ -1937,12 +1977,20 @@ class Handler(SimpleHTTPRequestHandler):
             return self._agent_loop()
         if self.path == '/api/mcp-discover':
             return self._mcp_discover()
+        if self.path.startswith('/api/dashboard'):
+            return self._handle_dashboard_post()
         if self.path == '/api/workbuddy':
             return self._proxy_workbuddy()
         if self.path.endswith('/api/tracks'):
             return self._handle_tracks_post()
         if self.path.endswith('/api/projects'):
             return self._handle_projects_post()
+        if self.path == '/api/datasources' or self.path.startswith('/api/datasources?'):
+            return self._handle_datasources_post()
+        if self.path == '/api/datasources/bind':
+            return self._handle_datasources_bind()
+        if self.path == '/api/feishu-credentials':
+            return self._handle_feishu_credentials_post()
         self.send_error(404)
 
     def _find_libreoffice(self):
@@ -2693,6 +2741,862 @@ class Handler(SimpleHTTPRequestHandler):
         _save_projects(projects)
         return self._serve_json({'ok': True, 'imported': imported})
 
+    # ===== 看板（Dashboard）API =====
+
+    def _load_datasources(self):
+        """加载数据源注册表"""
+        return _load_json(DATASOURCES_FILE, {'version': 2, 'datasources': {}})
+
+    def _save_datasources(self, registry):
+        """保存数据源注册表"""
+        _save_json(DATASOURCES_FILE, registry)
+
+    def _dashboard_config_path(self, project_id):
+        """返回某个项目的看板配置文件路径"""
+        safe_id = re.sub(r'[^a-zA-Z0-9_\-]', '_', project_id or 'default')
+        return os.path.join(DASHBOARD_DIR, f'.dashboard-{safe_id}.json')
+
+    def _load_dashboard_config(self, project_id):
+        """加载看板配置，不存在则返回默认空配置"""
+        path = self._dashboard_config_path(project_id)
+        return _load_json(path, dict(DEFAULT_DASHBOARD_CONFIG))
+
+    def _save_dashboard_config(self, project_id, config):
+        """保存看板配置"""
+        path = self._dashboard_config_path(project_id)
+        _save_json(path, config)
+
+    def _handle_dashboard_config_get(self):
+        """GET /api/dashboard/config?folder=xxx  — 返回该文件夹的看板配置
+           数据源从注册表中按 boundFolders 合并进来"""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        folder_id = qs.get('folder', [''])[0]
+        if not folder_id:
+            # 如果没有指定 folder，返回所有数据源的汇总
+            registry = self._load_datasources()
+            self._serve_json({
+                'folderId': '',
+                'datasources': registry.get('datasources', {}),
+                'cards': [],
+                'analyses': []
+            })
+            return
+        
+        # 加载该文件夹的看板配置（只有 cards 和 analyses）
+        config = self._load_dashboard_config(folder_id)
+        
+        # 从注册表中按 boundFolders 获取数据源
+        registry = self._load_datasources()
+        all_sources = registry.get('datasources', {})
+        matched_sources = {}
+        for sid, src in all_sources.items():
+            if folder_id in src.get('boundFolders', []):
+                matched_sources[sid] = src
+        
+        config['datasources'] = matched_sources
+        self._serve_json(config)
+
+    def _handle_dashboard_post(self):
+        """POST /api/dashboard/config  — 保存卡片/分析（不存数据源）
+           POST /api/dashboard/sync-feishu  — 飞书同步
+           POST /api/dashboard/analyze — 触发分析
+           POST /api/dashboard/parse-url — 解析飞书链接"""
+        path = self.path
+        if path == '/api/dashboard/config' or path.startswith('/api/dashboard/config?'):
+            return self._dashboard_save_config()
+        if path == '/api/dashboard/sync-feishu':
+            return self._dashboard_sync_feishu()
+        if path == '/api/dashboard/analyze':
+            return self._dashboard_analyze()
+        if path == '/api/dashboard/parse-url':
+            return self._dashboard_parse_url()
+        self.send_error(404)
+
+    def _dashboard_save_config(self):
+        """POST /api/dashboard/config — 保存看板的卡片和分析配置（不含数据源）"""
+        body = self._read_body()
+        if not body:
+            return
+        folder_id = body.get('folderId', body.get('folder', ''))
+        if not folder_id:
+            self._serve_json({'error': '缺少 folderId'}, 400)
+            return
+        config = body.get('config', body)
+        config['folderId'] = folder_id
+        if 'cards' not in config:
+            config['cards'] = []
+        if 'analyses' not in config:
+            config['analyses'] = []
+        self._save_dashboard_config(folder_id, config)
+        self._serve_json({'ok': True, 'folderId': folder_id})
+
+    # ===== 数据源注册表 CRUD =====
+
+    def _handle_datasources(self):
+        """GET /api/datasources — 获取所有数据源
+           GET /api/datasources?sourceId=xxx — 获取单个"""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        source_id = qs.get('sourceId', [''])[0]
+        registry = self._load_datasources()
+        if source_id:
+            src = registry.get('datasources', {}).get(source_id)
+            if not src:
+                self._serve_json({'error': '数据源不存在'}, 404)
+                return
+            self._serve_json(src)
+        else:
+            self._serve_json(registry.get('datasources', {}))
+
+    def _handle_datasources_post(self):
+        """POST /api/datasources — 创建或更新数据源"""
+        body = self._read_body()
+        if not body:
+            return
+        source_id = body.get('sourceId') or ('ds_' + str(int(time.time() * 1000)))
+        registry = self._load_datasources()
+        sources = registry.get('datasources', {})
+        
+        # 保留已有的 rawData（如果没有新数据传入）
+        existing = sources.get(source_id, {})
+        existing_raw_data = existing.get('rawData', [])
+        
+        src = {
+            'name': body.get('name', ''),
+            'type': body.get('type', 'manual'),
+            'createdAt': existing.get('createdAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'updatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'boundFolders': body.get('boundFolders', existing.get('boundFolders', [])),
+            'rawData': body.get('rawData') or existing_raw_data,
+            'lastSyncAt': body.get('lastSyncAt') or existing.get('lastSyncAt'),
+        }
+        # 飞书数据源特有字段
+        for key in ('appToken', 'tableId', 'credentialId', 'sourceUrl', 'columnMapping', 'icon'):
+            val = body.get(key)
+            if val is not None:
+                src[key] = val
+            elif key in existing:
+                src[key] = existing[key]
+        # 保留旧 config 向后兼容
+        if body.get('config'):
+            src['config'] = body['config']
+        elif existing.get('config'):
+            src['config'] = existing['config']
+        sources[source_id] = src
+        
+        registry['datasources'] = sources
+        self._save_datasources(registry)
+        self._serve_json({'ok': True, 'sourceId': source_id})
+
+    def _handle_datasources_delete(self):
+        """DELETE /api/datasources?sourceId=xxx"""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        source_id = qs.get('sourceId', [''])[0]
+        if not source_id:
+            self._serve_json({'error': '缺少 sourceId'}, 400)
+            return
+        registry = self._load_datasources()
+        if source_id not in registry.get('datasources', {}):
+            self._serve_json({'error': '数据源不存在'}, 404)
+            return
+        del registry['datasources'][source_id]
+        self._save_datasources(registry)
+        self._serve_json({'ok': True})
+
+    def _handle_datasources_bind(self):
+        """POST /api/datasources/bind — 绑定/解绑文件夹
+           Body: { sourceId, folderId, action: 'bind'|'unbind' }"""
+        body = self._read_body()
+        if not body:
+            return
+        source_id = body.get('sourceId', '')
+        folder_id = body.get('folderId', '')
+        action = body.get('action', 'bind')
+        if not source_id or not folder_id:
+            self._serve_json({'error': '缺少 sourceId 或 folderId'}, 400)
+            return
+        
+        registry = self._load_datasources()
+        sources = registry.get('datasources', {})
+        if source_id not in sources:
+            self._serve_json({'error': '数据源不存在'}, 404)
+            return
+        
+        src = sources[source_id]
+        folders = src.get('boundFolders', [])
+        if action == 'bind' and folder_id not in folders:
+            folders.append(folder_id)
+        elif action == 'unbind' and folder_id in folders:
+            folders.remove(folder_id)
+        
+        src['boundFolders'] = folders
+        src['updatedAt'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        sources[source_id] = src
+        registry['datasources'] = sources
+        self._save_datasources(registry)
+        self._serve_json({'ok': True, 'boundFolders': folders})
+
+    # ===== 飞书凭证管理 =====
+
+    def _load_feishu_credentials(self):
+        return _load_json(FEISHU_CREDENTIALS_FILE, {'credentials': {}})
+
+    def _save_feishu_credentials(self, data):
+        _save_json(FEISHU_CREDENTIALS_FILE, data)
+
+    def _parse_feishu_url(self, url):
+        """从飞书链接中提取信息
+        返回: { type: 'direct'|'wiki', ... } 或 None
+        直接多维表格: https://xxx.feishu.cn/base/BASCxxxxx?table=tblYYYYY
+        知识库:       https://xxx.feishu.cn/wiki/TOKEN
+        """
+        import re
+        domain_match = re.search(r'https?://([^/]+)', url)
+        if not domain_match:
+            return None
+        domain = domain_match.group(1)
+
+        # 直接多维表格链接: /base/xxx?table=yyy
+        token_match = re.search(r'/base/([A-Za-z0-9]+)', url)
+        if token_match:
+            app_token = token_match.group(1)
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(url).query)
+            table_id = qs.get('table', [None])[0]
+            if not table_id:
+                return None
+            return {'type': 'direct', 'appToken': app_token, 'tableId': table_id, 'domain': domain}
+
+        # 知识库链接: /wiki/TOKEN
+        wiki_match = re.search(r'/wiki/([A-Za-z0-9]+)', url)
+        if wiki_match:
+            return {'type': 'wiki', 'wikiToken': wiki_match.group(1), 'domain': domain}
+
+        return None
+
+    def _match_feishu_credential(self, domain):
+        """根据域名匹配飞书凭证。精确匹配优先，否则回退到第一个可用凭证。"""
+        creds_data = self._load_feishu_credentials()
+        credentials = creds_data.get('credentials', {})
+        # 精确域名匹配
+        for key, cred in credentials.items():
+            if cred.get('domain', '') == domain:
+                return key, cred
+        # 回退：base domain 匹配（如 my.feishu.cn 匹配 bytedance.feishu.cn）
+        base_domain = '.'.join(domain.split('.')[-2:]) if '.' in domain else domain
+        for key, cred in credentials.items():
+            cred_domain = cred.get('domain', '')
+            if cred_domain.endswith(base_domain):
+                return key, cred
+        # 最后回退：返回第一个配置的凭证
+        for key, cred in credentials.items():
+            if cred.get('appId') and cred.get('appSecret'):
+                return key, cred
+        return None, None
+
+    def _resolve_wiki_node(self, wiki_token, token):
+        """通过 Wiki API 解析知识库节点，返回 { objType, objToken, title }
+        如果是多维表格，objToken 即为 appToken
+        GET /open-apis/wiki/v2/spaces/get_node?token={wiki_token}
+        """
+        import urllib.parse
+        url = f'https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token={urllib.parse.quote(wiki_token, safe="")}'
+        result, err = self._feishu_request(url, token=token)
+        if err:
+            return None, err
+        node = (result or {}).get('data', {}).get('node', {})
+        obj_type = node.get('obj_type', '')
+        obj_token = node.get('obj_token', '')
+        title = node.get('title', '')
+        return {'objType': obj_type, 'objToken': obj_token, 'title': title}, None
+
+    def _feishu_list_tables(self, app_token, token):
+        """列出多维表格应用下的所有表格
+        GET /open-apis/bitable/v1/apps/{app_token}/tables
+        """
+        url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables'
+        result, err = self._feishu_request(url, token=token)
+        if err:
+            return None, err
+        tables = []
+        for t in (result or {}).get('data', {}).get('items', []):
+            tables.append({'tableId': t.get('table_id'), 'name': t.get('name')})
+        return tables, None
+
+    def _feishu_get_table_name(self, app_token, table_id, token):
+        """获取多维表格名称
+        GET /open-apis/bitable/v1/apps/{app_token}/tables/{table_id}
+        """
+        url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}'
+        result, err = self._feishu_request(url, token=token)
+        if err:
+            return None, err
+        name = (result or {}).get('data', {}).get('table', {}).get('name', '')
+        return name if name else None, None
+
+    def _feishu_get_app_name(self, app_token, token):
+        """获取多维表格应用名称
+        GET /open-apis/bitable/v1/apps/{app_token}
+        """
+        url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}'
+        result, err = self._feishu_request(url, token=token)
+        if err:
+            return None, err
+        name = (result or {}).get('data', {}).get('app', {}).get('name', '')
+        return name if name else None, None
+
+    def _handle_feishu_credentials_get(self):
+        """GET /api/feishu-credentials"""
+        data = self._load_feishu_credentials()
+        self._serve_json(data)
+
+    def _handle_feishu_credentials_post(self):
+        """POST /api/feishu-credentials — 保存凭证配置"""
+        body = self._read_body()
+        if not body:
+            return
+        data = body
+        self._save_feishu_credentials(data)
+        self._serve_json({'ok': True})
+
+    # ===== 飞书多维表格同步 =====
+
+    def _feishu_request(self, url, data=None, method='GET', token=None):
+        """调用飞书 Open API（urllib 实现，零依赖）"""
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+        body = json.dumps(data).encode('utf-8') if data is not None else None
+        req = urllib.request.Request(url, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode('utf-8')), None
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='replace')
+            try:
+                err_json = json.loads(err_body)
+                msg = err_json.get('msg') or err_json.get('message') or err_body
+            except (json.JSONDecodeError, ValueError):
+                msg = err_body
+            return None, f'飞书 API 错误 {e.code}：{msg}'
+        except Exception as e:
+            return None, f'请求飞书失败：{e}'
+
+    def _feishu_tenant_token(self, app_id, app_secret):
+        """获取 tenant_access_token"""
+        result, err = self._feishu_request(
+            'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+            data={'app_id': app_id, 'app_secret': app_secret},
+            method='POST'
+        )
+        if err:
+            return None, err
+        if not result or 'tenant_access_token' not in result:
+            return None, '未获取到 tenant_access_token：' + json.dumps(result, ensure_ascii=False)
+        return result['tenant_access_token'], None
+
+    def _feishu_list_fields(self, app_token, table_id, token):
+        """列出多维表格的字段（表头），用于列映射"""
+        url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields'
+        result, err = self._feishu_request(url, token=token)
+        if err:
+            return None, err
+        fields = []
+        for f in (result or {}).get('data', {}).get('items', []):
+            fields.append({'name': f.get('field_name'), 'type': f.get('type')})
+        return fields, None
+
+    def _feishu_list_records(self, app_token, table_id, token, page_size=500, max_pages=20):
+        """分页拉取多维表格所有记录"""
+        all_records = []
+        page_token = None
+        for _ in range(max_pages):
+            url = (f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records'
+                   f'?page_size={page_size}')
+            if page_token:
+                url += '&page_token=' + urllib.parse.quote(page_token)
+            result, err = self._feishu_request(url, token=token)
+            if err:
+                return None, err
+            data = (result or {}).get('data', {})
+            for r in data.get('items', []):
+                all_records.append(r.get('fields', {}))
+            if not data.get('has_more'):
+                break
+            page_token = data.get('page_token')
+            if not page_token:
+                break
+        return all_records, None
+
+    def _feishu_extract_display_value(self, field_val, is_date=False):
+        """提取飞书字段值为适合展示的值
+        日期字段 → '2026-06-29' 字符串
+        数字字段 → 数字
+        文本/其他 → 字符串
+        """
+        if field_val is None:
+            return '' if is_date else 0
+        if isinstance(field_val, (int, float)):
+            if is_date:
+                try:
+                    return time.strftime('%Y-%m-%d', time.localtime(field_val / 1000))
+                except (ValueError, OSError):
+                    return str(field_val)
+            return field_val
+        if isinstance(field_val, list):
+            # 多选/成员/附件 — 取文本拼接
+            parts = []
+            for item in field_val:
+                if isinstance(item, dict):
+                    parts.append(item.get('text', '') or item.get('name', ''))
+                elif isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, (int, float)):
+                    parts.append(str(item))
+            return ', '.join(p for p in parts if p) or ''
+        if isinstance(field_val, dict):
+            return field_val.get('text', '') or field_val.get('name', '') or str(field_val)
+        # 尝试把字符串转为数字
+        if isinstance(field_val, str):
+            try:
+                return float(field_val) if '.' in field_val else int(field_val)
+            except ValueError:
+                return field_val
+        return str(field_val)
+
+    def _feishu_parse_display_records(self, records, date_field, display_fields):
+        """按选中字段提取所有记录为展示用表格行
+        返回: [{"时间": "2026-06-29", "点赞": 11, "收藏": 2}, ...]
+        按日期降序排列（最新在上）
+        """
+        rows = []
+        for rec in records:
+            row = {}
+            for fname in display_fields:
+                row[fname] = self._feishu_extract_display_value(
+                    rec.get(fname), is_date=(fname == date_field)
+                )
+            if row.get(date_field):
+                rows.append(row)
+        # 日期降序：最新在上面
+        rows.sort(key=lambda r: str(r.get(date_field, '')), reverse=True)
+        return rows
+
+    def _dashboard_parse_url(self):
+        """POST /api/dashboard/parse-url
+        Body: { url: "https://..." }
+        支持:
+          - 直接多维表格: /base/BASCxxxxx?table=tblYYYYY
+          - 知识库:        /wiki/TOKEN（自动解析到多维表格）
+        """
+        body = self._read_body()
+        if not body:
+            return
+        url = body.get('url', '').strip()
+        if not url:
+            self._serve_json({'error': '缺少飞书链接'}, 400)
+            return
+
+        # 1. 解析 URL
+        parsed = self._parse_feishu_url(url)
+        if not parsed:
+            self._serve_json({'error': '无法解析飞书链接，支持多维表格链接和知识库链接'}, 400)
+            return
+
+        domain = parsed['domain']
+        url_type = parsed.get('type', 'direct')
+
+        # 2. 匹配凭证（支持跨域回退）
+        matched_key, matched_cred = self._match_feishu_credential(domain)
+        if not matched_cred:
+            self._serve_json({
+                'ok': True,
+                'needsCredential': True,
+                'domain': domain,
+                'message': f'未找到可用的飞书凭证，请先在配置中添加'
+            })
+            return
+
+        app_id = matched_cred.get('appId', '')
+        app_secret = matched_cred.get('appSecret', '')
+        if not app_id or not app_secret:
+            self._serve_json({'error': f'凭证「{matched_key}」缺少 App ID 或 App Secret'}, 400)
+            return
+
+        # 3. 获取 tenant token
+        token, err = self._feishu_tenant_token(app_id, app_secret)
+        if err:
+            self._serve_json({'error': err}, 400)
+            return
+
+        # 4. 根据链接类型解析
+        if url_type == 'wiki':
+            # 知识库链接：先解析 wiki node
+            wiki_node, err = self._resolve_wiki_node(parsed['wikiToken'], token)
+            if err:
+                self._serve_json({'error': f'解析知识库节点失败：{err}'}, 400)
+                return
+            obj_type = wiki_node['objType']
+            if obj_type != 'bitable':
+                self._serve_json({
+                    'error': f'该知识库节点类型为「{obj_type}」，不是多维表格。当前仅支持多维表格数据源。',
+                    'nodeType': obj_type,
+                    'nodeTitle': wiki_node['title']
+                }, 400)
+                return
+            app_token = wiki_node['objToken']
+            wiki_title = wiki_node['title']
+
+            # 列出多维表格中的所有表
+            tables, err = self._feishu_list_tables(app_token, token)
+            if err:
+                self._serve_json({'error': f'获取表格列表失败：{err}'}, 400)
+                return
+            if not tables:
+                self._serve_json({'error': '该多维表格中没有表格'}, 400)
+                return
+
+            # 单表直接用，多表让用户选
+            if len(tables) == 1:
+                table_id = tables[0]['tableId']
+                # 优先用知识库页面名，其次表格名
+                table_name = wiki_title or tables[0]['name'] or '飞书多维表格'
+            else:
+                # 多表：返回列表让前端选择
+                fields = []
+                for t in tables:
+                    # 尝试获取每个表的字段
+                    t_fields, _ = self._feishu_list_fields(app_token, t['tableId'], token)
+                    fields.append({
+                        'tableId': t['tableId'],
+                        'tableName': t['name'] or '未命名表格',
+                        'fields': t_fields or []
+                    })
+                self._serve_json({
+                    'ok': True,
+                    'type': 'wiki_multi_table',
+                    'appToken': app_token,
+                    'domain': domain,
+                    'credentialId': matched_key,
+                    'credentialName': matched_cred.get('name', matched_key),
+                    'wikiTitle': wiki_title,
+                    'tables': fields
+                })
+                return
+
+        else:
+            # 直接链接
+            app_token = parsed['appToken']
+            table_id = parsed['tableId']
+            # 优先用应用名，其次表格名
+            app_name, _ = self._feishu_get_app_name(app_token, token)
+            table_name, _ = self._feishu_get_table_name(app_token, table_id, token)
+            table_name = app_name or table_name or '飞书多维表格'
+
+        # 5. 获取字段列表
+        fields, err = self._feishu_list_fields(app_token, table_id, token)
+        if err:
+            self._serve_json({'error': err}, 400)
+            return
+
+        self._serve_json({
+            'ok': True,
+            'type': url_type,
+            'appToken': app_token,
+            'tableId': table_id,
+            'domain': domain,
+            'credentialId': matched_key,
+            'credentialName': matched_cred.get('name', matched_key),
+            'tableName': table_name,
+            'fields': fields
+        })
+
+    def _dashboard_sync_feishu(self):
+        """POST /api/dashboard/sync-feishu
+        Body: {
+          project, folderId, sourceId, name, icon,
+          appId, appSecret, appToken, tableId,
+          columnMapping, boundFolders,
+          mode: 'test' | 'sync'   # test=只测连接+拉字段, sync=完整拉取数据
+        }
+        """
+        body = self._read_body()
+        if not body:
+            return
+        project_id = body.get('project', '')  # 兼容旧参数
+        folder_id = body.get('folderId', '')  # 新参数
+
+        app_id = body.get('appId', '').strip()
+        app_secret = body.get('appSecret', '').strip()
+        app_token = body.get('appToken', '').strip()
+        table_id = body.get('tableId', '').strip()
+        credential_id = body.get('credentialId', '').strip()
+        mode = body.get('mode', 'sync')
+
+        # 如果给了 credentialId，从凭证配置中查找 appId/appSecret
+        if credential_id and (not app_id or not app_secret):
+            creds_data = self._load_feishu_credentials()
+            cred = creds_data.get('credentials', {}).get(credential_id, {})
+            app_id = app_id or cred.get('appId', '')
+            app_secret = app_secret or cred.get('appSecret', '')
+
+        if not (app_id and app_secret and app_token and table_id):
+            self._serve_json({'error': '缺少 appId/appSecret/appToken/tableId，或 credentialId 对应的凭证不完整'}, 400)
+            return
+
+        # 1. 获取 token
+        token, err = self._feishu_tenant_token(app_id, app_secret)
+        if err:
+            self._serve_json({'error': err}, 400)
+            return
+
+        # 2. test 模式：只拉字段，返回给前端做列映射
+        fields, err = self._feishu_list_fields(app_token, table_id, token)
+        if err:
+            self._serve_json({'error': err}, 400)
+            return
+
+        if mode == 'test':
+            self._serve_json({'ok': True, 'fields': fields})
+            return
+
+        # 3. sync 模式：拉取所有记录 + 按选中的字段解析
+        display_fields = body.get('displayFields', [])
+        date_field = body.get('dateField', '')
+        if not display_fields or not date_field:
+            # 兼容旧格式 columnMapping
+            column_mapping = body.get('columnMapping', {})
+            if column_mapping and column_mapping.get('metrics'):
+                date_field = column_mapping.get('date', '')
+                display_fields = [date_field] if date_field else []
+                for key, cfg in column_mapping.get('metrics', {}).items():
+                    col = cfg.get('column', '') or key
+                    if col not in display_fields:
+                        display_fields.append(col)
+        if not display_fields:
+            self._serve_json({'ok': True, 'needMapping': True, 'fields': fields})
+            return
+
+        records, err = self._feishu_list_records(app_token, table_id, token)
+        if err:
+            self._serve_json({'error': err}, 400)
+            return
+
+        rows = self._feishu_parse_display_records(records, date_field, display_fields)
+
+        # 4. 写入数据源注册表（不再是项目配置）
+        source_id = body.get('sourceId') or ('feishu_' + str(int(time.time() * 1000)))
+        source_name = body.get('name') or '飞书表格'
+        bound_folders = body.get('boundFolders', [])
+
+        registry = self._load_datasources()
+        sources = registry.get('datasources', {})
+
+        existing = sources.get(source_id, {})
+        sources[source_id] = {
+            'name': source_name,
+            'type': 'feishu',
+            'credentialId': credential_id,
+            'appToken': app_token,
+            'tableId': table_id,
+            'sourceUrl': body.get('sourceUrl', ''),
+            'createdAt': existing.get('createdAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'updatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'boundFolders': bound_folders or existing.get('boundFolders', []),
+            'dateField': date_field,
+            'displayFields': display_fields,
+            'rawData': rows,
+            'lastSyncAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        }
+
+        registry['datasources'] = sources
+        self._save_datasources(registry)
+
+        # 5. 对每个 boundFolder，自动生成/更新看板卡片
+        all_folders = bound_folders or existing.get('boundFolders', [])
+        card_count = 0
+        for fid in all_folders:
+            config = self._load_dashboard_config(fid)
+            cards = config.get('cards', [])
+            existing_keys = {(c['sourceId'], c['metricKey']) for c in cards}
+            for metric_key, mcfg in column_mapping.get('metrics', {}).items():
+                if (source_id, metric_key) in existing_keys:
+                    continue
+                cards.append({
+                    'id': 'card_' + source_id + '_' + metric_key + '_' + str(int(time.time() * 1000))[-6:],
+                    'sourceId': source_id,
+                    'metricKey': metric_key,
+                    'title': mcfg.get('label', metric_key),
+                    'type': 'number_trend',
+                    'unit': mcfg.get('unit', '')
+                })
+                existing_keys.add((source_id, metric_key))
+                card_count += 1
+            config['cards'] = cards
+            self._save_dashboard_config(fid, config)
+
+        # 兼容旧逻辑：如果传了 project（没有 boundFolders），也更新项目看板
+        if project_id and not bound_folders:
+            config = self._load_dashboard_config(project_id)
+            cards = config.get('cards', [])
+            existing_keys = {(c['sourceId'], c['metricKey']) for c in cards}
+            for metric_key, mcfg in column_mapping.get('metrics', {}).items():
+                if (source_id, metric_key) in existing_keys:
+                    continue
+                cards.append({
+                    'id': 'card_' + source_id + '_' + metric_key + '_' + str(int(time.time() * 1000))[-6:],
+                    'sourceId': source_id,
+                    'metricKey': metric_key,
+                    'title': mcfg.get('label', metric_key),
+                    'type': 'number_trend',
+                    'unit': mcfg.get('unit', '')
+                })
+                existing_keys.add((source_id, metric_key))
+                card_count += 1
+            config['cards'] = cards
+            self._save_dashboard_config(project_id, config)
+
+        self._serve_json({'ok': True, 'sourceId': source_id, 'rowCount': len(rows), 'cardCount': card_count})
+
+    def _dashboard_analyze(self):
+        """POST /api/dashboard/analyze — 触发分析
+        Body: { folderId, cardId, agentId, prompt }
+        Returns: { context: str, reportPath: str, agentId: str }
+        """
+        body = self._read_body()
+        if not body:
+            return
+        folder_id = body.get('folderId', body.get('project', ''))  # 兼容旧参数 project
+        card_id = body.get('cardId', '')
+        agent_id = body.get('agentId', '')
+        user_prompt = body.get('prompt', '')
+
+        if not folder_id or not card_id:
+            self._serve_json({'error': '缺少 folderId 或 cardId'}, 400)
+            return
+
+        config = self._load_dashboard_config(folder_id)
+        card = next((c for c in config.get('cards', []) if c['id'] == card_id), None)
+        if not card:
+            self._serve_json({'error': '未找到卡片 ' + card_id}, 404)
+            return
+
+        # 从注册表查找数据源
+        registry = self._load_datasources()
+        all_sources = registry.get('datasources', {})
+        source = all_sources.get(card.get('sourceId'))
+
+        # 组装数据上下文（用注册表的 rawData 计算）
+        data = None
+        if source:
+            rows = source.get('rawData', [])
+            key = card.get('metricKey', '')
+            if rows and key:
+                series = sorted(
+                    [(r.get('date', ''), float(r.get(key, 0))) for r in rows if r.get('date')],
+                    key=lambda x: str(x[0])
+                )
+                if series:
+                    values = [v for _, v in series]
+                    labels = [d for d, _ in series]
+                    current = values[-1]
+                    previous = values[-2] if len(values) >= 2 else current
+                    change = current - previous
+                    change_percent = (change / abs(previous) * 100) if previous != 0 else 0
+                    data = {'current': current, 'previous': previous, 'change': change, 'changePercent': change_percent, 'values': values, 'labels': labels}
+
+        source_name = source.get('name', '手动输入') if source else '手动输入'
+        folder_name = config.get('folderName', folder_id)
+
+        context_lines = [
+            f'[系统] 用户从「{folder_name}」业务看板触发了数据分析任务。',
+            '',
+            f'📊 分析指标：{card.get("title", card_id)}',
+            f'📂 数据来源：{source_name}',
+        ]
+
+        if data:
+            context_lines.append(f'📈 当前值：{format_metric_value_static(data["current"], card)}（{"↑+" if data["change"] >= 0 else ""}{data["changePercent"]:.1f}%）')
+            context_lines.append('📊 近期趋势：')
+            labels = data.get('labels', [])
+            values = data.get('values', [])
+            show = 7
+            for i in range(max(0, len(values) - show), len(values)):
+                pct = ''
+                if i > 0 and values[i - 1] != 0:
+                    p = ((values[i] - values[i - 1]) / abs(values[i - 1])) * 100
+                    pct = f' ({"+" if p >= 0 else ""}{p:.1f}%)'
+                context_lines.append(f'  - {labels[i] if i < len(labels) else ""}: {values[i]}{pct}')
+
+        if source:
+            updated = source.get('lastSyncAt', '')
+            if updated:
+                context_lines.append(f'')
+                context_lines.append(f'🔗 数据更新时间：{updated}')
+
+        if user_prompt:
+            context_lines.append(f'')
+            context_lines.append(f'📝 分析提示：{user_prompt}')
+
+        # 确定报告保存路径
+        date_str = time.strftime('%Y%m%d')
+        card_title = card.get('title', card_id).replace('/', '_').replace('\\', '_')
+        report_dir = os.path.join(DATA_DIR, 'dashboard-reports')
+        report_filename = f'{card_title}_分析_{date_str}.md'
+        report_path = os.path.join(report_dir, report_filename)
+
+        context_lines.append(f'')
+        context_lines.append(f'📁 报告保存路径：{report_path}')
+        context_lines.append(f'')
+        context_lines.append(f'请对该指标进行深度分析，自主选择分析维度和方法，产出结构化分析报告。')
+        context_lines.append(f'分析完成后，请使用 write_file 工具将完整报告写入上述路径。')
+
+        context_str = '\n'.join(context_lines)
+
+        # 记录分析到 config
+        analyses = config.get('analyses', [])
+        analysis_id = f'analysis_{int(time.time() * 1000)}'
+        analyses.append({
+            'id': analysis_id,
+            'cardId': card_id,
+            'agentId': agent_id,
+            'agentName': agent_id,
+            'triggeredAt': time.strftime('%Y-%m-%dT%H:%M:%S'),
+            'reportPath': report_path,
+            'summary': ''
+        })
+        config['analyses'] = analyses
+        self._save_dashboard_config(folder_id, config)
+
+        self._serve_json({
+            'ok': True,
+            'context': context_str,
+            'reportPath': report_path,
+            'analysisId': analysis_id,
+            'agentId': agent_id or ''
+        })
+
+    def _dashboard_upload_csv(self):
+        """POST /api/dashboard/upload-csv — 已废弃，改用飞书多维表格"""
+        self._serve_json({'error': 'CSV 上传已废弃，请使用飞书多维表格作为数据源'}, 410)
+
+    def _dashboard_import_csv(self):
+        """POST /api/dashboard/import-csv — 已废弃"""
+        self._serve_json({'error': 'CSV 导入已废弃，请使用飞书多维表格作为数据源'}, 410)
+
+    def _read_body(self):
+        """读取请求体 JSON"""
+        length = int(self.headers.get('Content-Length', 0))
+        if length == 0:
+            return None
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
     def _proxy_workbuddy(self):
         """将请求转发到 WorkBuddy 侧车进程 (Node.js SSE)."""
         length = int(self.headers.get('Content-Length', 0))
@@ -2879,6 +3783,8 @@ class Handler(SimpleHTTPRequestHandler):
         base_url = req.get('base_url', '')
         model = req.get('model', '')
         messages = req.get('messages', [])
+        _t0 = time.time()
+        with open(TIMING_FILE, 'a') as _tf: _tf.write(f'{time.strftime("%H:%M:%S")} --- Agent请求开始 ---\n')
         workspace = req.get('workspace', '')
         max_iter = req.get('max_iterations', 10)
         agent_id = req.get('agentId', '')
@@ -2939,7 +3845,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "type": "function",
                 "function": {
                     "name": "write_file",
-                    "description": "新建或覆盖写入一个文件。",
+                    "description": "仅用于创建新文件（文件尚不存在时）。修改已有文件必须用 edit_file（精确替换），不要用 write_file 覆写整个文件——那样既浪费 token 又容易出错。",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -2947,6 +3853,22 @@ class Handler(SimpleHTTPRequestHandler):
                             "content": {"type": "string", "description": "要写入的完整文件内容"}
                         },
                         "required": ["path", "content"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "edit_file",
+                    "description": "精确编辑文件：在工作区文件中查找并替换指定的文本。old_string 必须唯一匹配（只出现一次），否则工具会报错——你需要调整 old_string 使其更精确。类似 sed 的 s/old/new/，但需要更多上下文确保唯一匹配。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "description": "相对于工作区根目录的文件路径"},
+                            "old_string": {"type": "string", "description": "要被替换的文本。必须精确匹配原文件内容（包括缩进和换行），且必须在文件中唯一出现。如果有重复，请增加更多上下文使其唯一。"},
+                            "new_string": {"type": "string", "description": "替换后的文本"}
+                        },
+                        "required": ["path", "old_string", "new_string"]
                     }
                 }
             },
@@ -3089,7 +4011,16 @@ class Handler(SimpleHTTPRequestHandler):
         mcp_enabled = mcp_data.get('enabled', [])
         if mcp_enabled:
             enabled_mcp = {sid: mcp_items[sid] for sid in mcp_enabled if sid in mcp_items}
-            mcp_discover_results = _discover_mcp_tools(enabled_mcp)
+            # 缓存 MCP 工具列表，5 分钟内不重复发现
+            cache_key = json.dumps({sid: cfg.get('command', '') for sid, cfg in enabled_mcp.items()}, sort_keys=True)
+            now = time.time()
+            global _MCP_TOOLS_CACHE
+            cached = _MCP_TOOLS_CACHE.get('key') == cache_key and (now - _MCP_TOOLS_CACHE.get('ts', 0)) < 300
+            if cached:
+                mcp_discover_results = _MCP_TOOLS_CACHE.get('results', {})
+            else:
+                mcp_discover_results = _discover_mcp_tools(enabled_mcp)
+                _MCP_TOOLS_CACHE = {'key': cache_key, 'ts': now, 'results': mcp_discover_results}
             for sid, res in mcp_discover_results.items():
                 if 'error' in res:
                     continue
@@ -3172,6 +4103,9 @@ class Handler(SimpleHTTPRequestHandler):
 
                 elif name == 'write_file':
                     p = _resolve(args['path'])
+                    # 文件已存在时拒绝写入，引导模型用 edit_file
+                    if os.path.isfile(p):
+                        return f'❌ 文件 "{args["path"]}" 已存在，不允许用 write_file 覆写。请用 edit_file 进行精确修改：1) 先用 read_file 读取文件内容，2) 找到要改的部分作为 old_string，3) 用 edit_file(path, old_string, new_string) 替换。'
                     parent = os.path.dirname(p)
                     if not os.path.isdir(parent):
                         return f'目录不存在。请先用 list_dir 确认父目录'
@@ -3180,7 +4114,29 @@ class Handler(SimpleHTTPRequestHandler):
                         f.write(args['content'])
                     rel = os.path.relpath(p, wpath)
                     _track_file_change(wpath, rel)
-                    return f'文件已写入：{args["path"]}'
+                    return f'文件已创建：{args["path"]}'
+
+                elif name == 'edit_file':
+                    p = _resolve(args['path'])
+                    if not os.path.isfile(p):
+                        return f'文件不存在：{args["path"]}'
+                    with open(p, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+                    old = args['old_string']
+                    new = args['new_string']
+                    if old == new:
+                        return 'old_string 和 new_string 相同，未做任何修改。'
+                    count = content.count(old)
+                    if count == 0:
+                        return f'❌ 未找到要替换的文本。文件内容中不包含 old_string。请检查字符串是否精确匹配（包括缩进、空格、换行）。'
+                    if count > 1:
+                        return f'❌ old_string 在文件中出现了 {count} 次，不是唯一匹配。请增加更多上下文（前后几行）使 old_string 唯一。'
+                    content = content.replace(old, new, 1)
+                    with open(p, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    rel = os.path.relpath(p, wpath)
+                    _track_file_change(wpath, rel)
+                    return f'文件已编辑：{args["path"]}（替换了 1 处）'
 
                 elif name == 'search_files':
                     query = args['query'].lower()
@@ -3423,7 +4379,8 @@ class Handler(SimpleHTTPRequestHandler):
                                 'messages': sub_messages,
                                 'tools': sub_tools,
                                 'tool_choice': 'auto',
-                                'temperature': sub_temp
+                                'temperature': sub_temp,
+                                'stream': True
                             }).encode('utf-8')
 
                             r = urllib.request.Request(url, data=payload, headers={
@@ -3432,11 +4389,59 @@ class Handler(SimpleHTTPRequestHandler):
                             }, method='POST')
 
                             try:
-                                with urllib.request.urlopen(r, timeout=120) as resp:
-                                    result = json.loads(resp.read().decode('utf-8'))
+                                sub_content = ''
+                                sub_tool_calls_acc = {}
+                                sub_finish = ''
+                                sub_usage = {}
 
-                                # 记录子 Agent 的 token 用量
-                                sub_usage = result.get('usage', {})
+                                with urllib.request.urlopen(r, timeout=120) as resp:
+                                    for line in resp:
+                                        line = line.decode('utf-8', errors='replace').strip()
+                                        if not line or not line.startswith('data: '):
+                                            continue
+                                        data_str = line[6:]
+                                        if data_str == '[DONE]':
+                                            break
+                                        try:
+                                            chunk = json.loads(data_str)
+                                        except json.JSONDecodeError:
+                                            continue
+                                        choices = chunk.get('choices', [])
+                                        if not choices:
+                                            continue
+                                        delta = choices[0].get('delta', {})
+                                        sub_finish = choices[0].get('finish_reason', '')
+                                        if 'usage' in chunk:
+                                            sub_usage = chunk['usage']
+                                        if 'content' in delta and delta['content']:
+                                            sub_content += delta['content']
+                                            self._serve_sse('invoke_agent_token', {
+                                                'agentId': agent_id,
+                                                'content': delta['content']
+                                            })
+                                        if 'tool_calls' in delta:
+                                            for tc in delta['tool_calls']:
+                                                idx = tc.get('index', 0)
+                                                if idx not in sub_tool_calls_acc:
+                                                    sub_tool_calls_acc[idx] = {'id': '', 'name': '', 'arguments': ''}
+                                                if 'id' in tc and tc['id']:
+                                                    sub_tool_calls_acc[idx]['id'] = tc['id']
+                                                if 'function' in tc:
+                                                    if 'name' in tc['function'] and tc['function']['name']:
+                                                        sub_tool_calls_acc[idx]['name'] = tc['function']['name']
+                                                    if 'arguments' in tc['function']:
+                                                        sub_tool_calls_acc[idx]['arguments'] += tc['function']['arguments']
+
+                                # Rebuild tool calls list
+                                sub_tool_calls_list = []
+                                for idx in sorted(sub_tool_calls_acc.keys()):
+                                    tc = sub_tool_calls_acc[idx]
+                                    if tc['name']:
+                                        sub_tool_calls_list.append({
+                                            'id': tc['id'], 'type': 'function',
+                                            'function': {'name': tc['name'], 'arguments': tc['arguments']}
+                                        })
+
                                 if sub_usage:
                                     _record_usage(sub_model, agent_id, agent['name'],
                                                   sub_usage.get('prompt_tokens', 0),
@@ -3460,12 +4465,8 @@ class Handler(SimpleHTTPRequestHandler):
                                 })
                                 return f'子 Agent「{agent["name"]}」API 调用失败 (HTTP {e.code})'
 
-                            choice = result.get('choices', [{}])[0]
-                            msg = choice.get('message', {})
-                            finish = choice.get('finish_reason', '')
-
-                            if finish == 'tool_calls' or msg.get('tool_calls'):
-                                tool_calls = msg.get('tool_calls', [])
+                            if sub_finish == 'tool_calls' or sub_tool_calls_list:
+                                tool_calls = sub_tool_calls_list
                                 tool_results_local = []
                                 for tc in tool_calls:
                                     fn_name = tc['function']['name']
@@ -3497,7 +4498,7 @@ class Handler(SimpleHTTPRequestHandler):
 
                                 sub_messages.append({
                                     'role': 'assistant',
-                                    'content': msg.get('content') or msg.get('reasoning_content', ''),
+                                    'content': sub_content,
                                     'tool_calls': tool_calls
                                 })
                                 for tc, rt in zip(tool_calls, tool_results_local):
@@ -3509,7 +4510,7 @@ class Handler(SimpleHTTPRequestHandler):
                                 continue
 
                             # Final text response
-                            final_response = msg.get('content') or msg.get('reasoning_content', '')
+                            final_response = sub_content
 
                             # Auto-save code blocks if outputFile specified
                             if output_file and final_response and wpath:
@@ -3665,17 +4666,18 @@ class Handler(SimpleHTTPRequestHandler):
         iteration = 0
         system_msg = next((m for m in messages if m['role'] == 'system'), None)
         if not system_msg:
-            base_prompt = '你是一个智能助手，是用户的主 Agent。你可以调用其他专业智能体来协作完成任务。'
+            base_prompt = '你是用户的 AI 助手。回复要求：简洁、直接、无废话、无 emoji。用 Markdown 标题和列表组织信息，代码放代码块。'
             if wpath:
-                base_prompt += f'当前工作区根目录：{wpath}。所有文件路径相对于此目录（"."=根目录）。当用户说"在XX文件夹里面"操作而XX正好是根目录的名字时，直接在根目录操作，不要创建同名子目录。根目录下的文件和文件夹是用户的直接内容，像管理自己的文件夹一样管理它们。你可以使用工具读取、写入、搜索文件。操作前先用 list_dir(".")看一眼。你还可以使用 web_search 搜索互联网获取最新信息，使用 web_fetch 抓取网页内容你可以使用 invoke_agent 调用其他智能体（如代码助手、文案助手、图表助手、数据分析师）来完成专项任务。你可以使用 run_shell 执行 shell 命令——运行脚本、git 操作、npm/pip 包管理、乃至调用 Claude Code 等 CLI 工具。请用中文回复。'
+                base_prompt += f' 工作区：{wpath}。文件操作优先用 edit_file 而非 write_file。可用工具：文件读写搜索、shell、web 搜索抓取、调用子 Agent。中文回复。'
             else:
-                base_prompt += '你可以根据对话中的文件内容回答用户问题。你可以使用 web_search 搜索互联网获取最新信息，使用 web_fetch 抓取网页内容。你可以使用 invoke_agent 调用其他智能体（如代码助手、文案助手、图表助手、数据分析师）来完成专项任务。你可以使用 run_shell 执行 shell 命令。请用中文回复。'
+                base_prompt += ' 文件编辑优先用 edit_file。可用工具：文件读写、shell、web 搜索、子 Agent 调用。中文回复。'
             system_msg = {'role': 'system', 'content': base_prompt}
             messages.insert(0, system_msg)
 
         try:
             while iteration < max_iter:
                 iteration += 1
+                with open(TIMING_FILE, 'a') as _tf: _tf.write(f'{time.strftime("%H:%M:%S")} 第{iteration}轮开始 总耗时{time.time()-_t0:.1f}s\n')
                 self._serve_sse('iteration', {'iteration': iteration, 'max_iter': max_iter})
 
                 url = base_url.rstrip('/') + '/chat/completions'
@@ -3683,7 +4685,8 @@ class Handler(SimpleHTTPRequestHandler):
                     'model': model,
                     'messages': messages,
                     'tools': tools,
-                    'tool_choice': 'auto'
+                    'tool_choice': 'auto',
+                    'stream': True
                 }
                 if temperature is not None:
                     payload_dict['temperature'] = temperature
@@ -3694,22 +4697,85 @@ class Handler(SimpleHTTPRequestHandler):
                     'Authorization': f'Bearer {api_key}'
                 }, method='POST')
 
+                # 流式读取：逐 token 推送，同时累积完整响应
+                accumulated_content = ''
+                accumulated_tool_calls = {}  # {index: {id, name, arguments}}
+                finish_reason = ''
+                usage = {}
+                _t_api_start = time.time()
+                _first_token = True
+
                 with urllib.request.urlopen(r, timeout=120) as resp:
-                    result = json.loads(resp.read().decode('utf-8'))
+                    for line in resp:
+                        if _first_token:
+                            _first_token = False
+                            with open(TIMING_FILE, 'a') as _tf: _tf.write(f'{time.strftime("%H:%M:%S")} 首token耗时{time.time()-_t_api_start:.1f}s 总耗时{time.time()-_t0:.1f}s\n')
+                        line = line.decode('utf-8', errors='replace').strip()
+                        if not line or not line.startswith('data: '):
+                            continue
+                        data_str = line[6:]  # strip 'data: ' prefix
+                        if data_str == '[DONE]':
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+
+                        choices = chunk.get('choices', [])
+                        if not choices:
+                            continue
+                        delta = choices[0].get('delta', {})
+                        finish_reason = choices[0].get('finish_reason', '')
+
+                        # 累积 token 用量
+                        if 'usage' in chunk:
+                            usage = chunk['usage']
+
+                        # 文本内容 → 立即推给前端
+                        if 'content' in delta and delta['content']:
+                            accumulated_content += delta['content']
+                            self._serve_sse('token', {'content': delta['content']})
+
+                        # 工具调用 → 累积（OpenAI 流式会分多个 chunk 传 tool_calls）
+                        if 'tool_calls' in delta:
+                            for tc in delta['tool_calls']:
+                                idx = tc.get('index', 0)
+                                if idx not in accumulated_tool_calls:
+                                    accumulated_tool_calls[idx] = {
+                                        'id': tc.get('id', ''),
+                                        'name': '',
+                                        'arguments': ''
+                                    }
+                                if 'id' in tc and tc['id']:
+                                    accumulated_tool_calls[idx]['id'] = tc['id']
+                                if 'function' in tc:
+                                    if 'name' in tc['function'] and tc['function']['name']:
+                                        accumulated_tool_calls[idx]['name'] = tc['function']['name']
+                                    if 'arguments' in tc['function']:
+                                        accumulated_tool_calls[idx]['arguments'] += tc['function']['arguments']
+
+                # 重建为 OpenAI 格式的工具调用列表
+                tool_calls_list = []
+                for idx in sorted(accumulated_tool_calls.keys()):
+                    tc = accumulated_tool_calls[idx]
+                    if tc['name']:  # 只保留有名字的完整调用
+                        tool_calls_list.append({
+                            'id': tc['id'],
+                            'type': 'function',
+                            'function': {
+                                'name': tc['name'],
+                                'arguments': tc['arguments']
+                            }
+                        })
 
                 # 记录 token 用量
-                usage = result.get('usage', {})
                 if usage:
                     _record_usage(model, 'main', '主 Agent',
                                   usage.get('prompt_tokens', 0),
                                   usage.get('completion_tokens', 0))
 
-                choice = result.get('choices', [{}])[0]
-                msg = choice.get('message', {})
-                finish = choice.get('finish_reason', '')
-
-                if finish == 'tool_calls' or msg.get('tool_calls'):
-                    tool_calls = msg.get('tool_calls', [])
+                if finish_reason == 'tool_calls' or tool_calls_list:
+                    tool_calls = tool_calls_list
                     # 执行每个工具调用一次，结果同时用于 SSE 展示和 messages 历史
                     tool_results = []
                     for tc in tool_calls:
@@ -3737,7 +4803,7 @@ class Handler(SimpleHTTPRequestHandler):
                     # Add to message history（复用已执行的结果，不重复执行）
                     messages.append({
                         'role': 'assistant',
-                        'content': msg.get('content') or msg.get('reasoning_content', ''),
+                        'content': accumulated_content,
                         'tool_calls': tool_calls
                     })
                     for tc, result_text in zip(tool_calls, tool_results):
@@ -3749,7 +4815,7 @@ class Handler(SimpleHTTPRequestHandler):
                     continue
 
                 # Final text response
-                final_content = msg.get('content') or msg.get('reasoning_content', '')
+                final_content = accumulated_content
                 self._serve_sse('response', {
                     'content': final_content,
                     'iterations': iteration,
@@ -3884,6 +4950,44 @@ def run_server(host='127.0.0.1', port=8765, data_dir=None, open_browser=False):
 
     HTTPServer.allow_reuse_address = True
     HTTPServer((host, port), Handler).serve_forever()
+
+
+
+# ===== 看板静态辅助函数 =====
+
+def compute_metric_data_static(card, config):
+    """纯 Python 版本的指标数据计算（供 analyze API 使用）"""
+    source = next((s for s in config.get('datasources', []) if s['id'] == card.get('sourceId')), None)
+    rows = (source or {}).get('rawData', [])
+    key = card.get('metricKey', '')
+    if not rows or not key:
+        return None
+    series = sorted(
+        [(r.get('date', ''), float(r.get(key, 0))) for r in rows if r.get('date')],
+        key=lambda x: str(x[0])
+    )
+    if not series:
+        return None
+    values = [v for _, v in series]
+    labels = [d for d, _ in series]
+    current = values[-1]
+    previous = values[-2] if len(values) >= 2 else current
+    change = current - previous
+    change_percent = (change / abs(previous) * 100) if previous != 0 else 0
+    return {'current': current, 'previous': previous, 'change': change, 'changePercent': change_percent, 'values': values, 'labels': labels}
+
+
+def format_metric_value_static(val, card):
+    """格式化指标值"""
+    if val is None:
+        return '—'
+    unit = card.get('unit', '')
+    if card.get('type') == 'percentage' or unit == '%':
+        return f'{float(val):.1f}%'
+    n = float(val)
+    if abs(n) >= 10000:
+        return f'{n:,.0f}'
+    return f'{n:.2f}'
 
 
 if __name__ == '__main__':
