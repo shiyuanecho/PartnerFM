@@ -1,9 +1,9 @@
-# WorkBuddy ↔ PartnerFM 集成指南
+# WorkBuddy ↔ Seegent 集成指南
 
 ## 架构概述
 
 ```
-用户 → PartnerFM 前端 (index.html)
+用户 → Seegent 前端 (index.html)
         → Python 后端 (server.py) /api/workbuddy
             → Node.js 侧车 (sidecar) port 9876
                 → @tencent-ai/agent-sdk → WorkBuddy API
@@ -226,7 +226,7 @@ function updateLastAssistantMessage(text, msgIdx) {
 # 终端 1：启动侧车
 cd workbuddy-sidecar && node server.js
 
-# 终端 2：启动 PartnerFM
+# 终端 2：启动 Seegent
 cd .. && python3 server.py
 ```
 

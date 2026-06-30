@@ -1,4 +1,4 @@
-# PartnerFM 项目记忆
+# Seegent 项目记忆
 
 ## 架构概览
 
@@ -13,9 +13,9 @@
 | 模块 | 数据源 | 说明 |
 |------|--------|------|
 | 文件 | IndexedDB + File System Access API | 文件夹树、标签页编辑、Markdown/HTML 预览、多模态支持 |
-| 模型 | `.partnerfm-models.json` | Provider CRUD、API Key 管理、模型勾选、聊天选择器 |
-| MCP | `.partnerfm-mcp.json` | MCP 服务器注册表 + CLI 命令集成 |
-| 角色 | `.partnerfm-roles.json` | 角色 CRUD（合并了原提示词 + 能力/技能模块） |
+| 模型 | `.seegent-models.json` | Provider CRUD、API Key 管理、模型勾选、聊天选择器 |
+| MCP | `.seegent-mcp.json` | MCP 服务器注册表 + CLI 命令集成 |
+| 角色 | `.seegent-roles.json` | 角色 CRUD（合并了原提示词 + 能力/技能模块） |
 
 模块切换通过 `switchModule(name)` → 对应 `#{name}-module` div 的 `.active` 类切换。activeModule 持久化到 localStorage，启动时 `setTimeout` + try-catch 恢复。
 
@@ -41,7 +41,7 @@
 
 ## 文件夹排序
 
-- 排序通过 localStorage key `partnerfm-folder-order` 持久化（`state.folders.map(f => f.id)` 数组）
+- 排序通过 localStorage key `seegent-folder-order` 持久化（`state.folders.map(f => f.id)` 数组）
 - `saveFolderOrder()` 在添加/排序时写入，`applyFolderOrder()` 在 init 时恢复
 - 新增文件夹追加到排序末尾，排序中不存在的旧文件夹保持原位置
 
@@ -59,7 +59,7 @@ const DOM_SELECTORS = {
 const dom = {};
 for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
   dom[key] = document.querySelector(sel);
-  if (!dom[key]) console.warn('[PartnerFM] ⚠️ DOM 缺失: ' + key + ' ← ' + sel);
+  if (!dom[key]) console.warn('[Seegent] ⚠️ DOM 缺失: ' + key + ' ← ' + sel);
 }
 ```
 
@@ -103,7 +103,7 @@ for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
 ## 模型管理
 
 ### 数据模型
-- 配置文件 `.partnerfm-models.json`，结构为 `{ providers: { pid: { key, models[] } }, default: "pid/model" }`
+- 配置文件 `.seegent-models.json`，结构为 `{ providers: { pid: { key, models[] } }, default: "pid/model" }`
 - Provider 注册表 `PROVIDER_REGISTRY` 定义内置 provider 及其模型元数据（ctx、cost）
 - 旧格式 `{ models: [...] }` 自动迁移到新格式
 - `getProviderModelMap()` 遍历所有已配置 provider 的启用模型，扁平化为聊天选择器选项
@@ -118,7 +118,7 @@ for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
 ### 2. 浏览器刷新后回到首页
 - **现象**：在模型管理页面刷新，自动跳回文件管理页
 - **根因**：`activeModule` 默认写死 `'file'`，切换模块时未持久化
-- **修复**：切换模块时 `localStorage.setItem('partnerfm-module', name)`，启动时从 localStorage 恢复
+- **修复**：切换模块时 `localStorage.setItem('seegent-module', name)`，启动时从 localStorage 恢复
 
 ### 3. 刷新后页面全白、点不动
 - **现象**：加了模块持久化后，刷新页面所有内容消失
@@ -128,7 +128,7 @@ for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
 ### 4. 模型列表中多出旧模型 ID
 - **现象**：DeepSeek 配了两个 V4 模型，但聊天选择器显示 3 个
 - **根因**：旧格式迁移时把 `deepseek-chat` 写入 `models` 数组，后续编辑时旧 ID 未被清理
-- **修复**：清理 `.partnerfm-models.json` 中的旧 ID，`showProviderDetail` 做防御处理
+- **修复**：清理 `.seegent-models.json` 中的旧 ID，`showProviderDetail` 做防御处理
 
 ### 5. 第二个 script 块崩溃导致部分功能失效
 - **现象**：页面加载后右键菜单、模块切换等功能异常
@@ -161,7 +161,7 @@ for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
 
 ### 向量语义检索（embedding + SQLite 向量库）
 - 对文件内容生成向量嵌入，支持语义搜索（已预留 `_build_embedding`、`_index_file` 等后台接口）
-- 数据库 `.partnerfm-index.db` 已创建 schema，等待 embedding API 接入
+- 数据库 `.seegent-index.db` 已创建 schema，等待 embedding API 接入
 
 ### PDF/Word 全文建索引
 - 对 PDF 和 Word 文档生成全文索引，支持语义检索
@@ -183,10 +183,10 @@ for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
 - 修改 HTML 结构时，同步检查 `DOM_SELECTORS` 表是否完整
 - 新增 id 元素后，在 `DOM_SELECTORS` 中加一行，表格按字母排序
 - 修改文件夹持久化相关逻辑时，参照"重要原则"中的 4 条规则
-- 不要删除 `.partnerfm-state.json`（服务器端状态，存 tabs/expandedNodes 等）
+- 不要删除 `.seegent-state.json`（服务器端状态，存 tabs/expandedNodes 等）
 - `server.py` 中 `Cache-Control: no-store` 仅影响 HTTP 缓存，不影响 IndexedDB
 - **页面级 IIFE 用 `setTimeout` + try-catch 包裹**，避免同步执行时操作未就绪 DOM 导致整页崩溃
 - **字符串函数名用 `window[name]()` 调用**，不要直接当函数执行
 - **`localStorage` 读取必须防御**：值可能不存在、被篡改、对应 DOM 已删除
 - **绝对不要在代码、配置、对话中明文输出任何密钥**：包括但不限于 API Key、App ID、App Secret、Token、密码。配置文件中的敏感字段一律用占位符（如 `<你的AppToken>`），让人手动填写。教程示例中也不得出现真实凭证
-- **配置文件是用户手动维护的**：`.partnerfm-models.json`、`.partnerfm-mcp.json`、`.partnerfm-cli.json` 中的密钥和 Token 由用户自己填写，工具绝不代填明文
+- **配置文件是用户手动维护的**：`.seegent-models.json`、`.seegent-mcp.json`、`.seegent-cli.json` 中的密钥和 Token 由用户自己填写，工具绝不代填明文

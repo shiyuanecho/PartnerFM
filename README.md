@@ -1,11 +1,11 @@
-# PartnerFM — 本地 AI 智能体工作台
+# Seegent — 本地 AI 智能体工作台
 
 > **浏览器即桌面，本地即安全。**  
 > 一个在浏览器中运行的本地 AI 工作站，文件、对话、Agent、MCP 全栈闭环，
 > 数据不出本机，隐私由你掌控。
 
 ```text
-pip install partnerfm   →   一键起飞，全本地运行
+pip install seegent   →   一键起飞，全本地运行
 ```
 
 ---
@@ -37,8 +37,8 @@ pip install partnerfm   →   一键起飞，全本地运行
 ## 快速开始
 
 ```bash
-pip install partnerfm
-partnerfm
+pip install seegent
+seegent
 ```
 
-浏览器访问 `http://localhost:8080` 即可使用。
+浏览器访问 `http://localhost:8765` 即可使用。

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PartnerFM</title>
+<title>Seegent</title>
 <style>
 /* ========== 基础 ========== */
 :root {
@@ -2745,7 +2745,7 @@ body {
   <!-- ===== Apple 风格顶栏 ===== -->
   <header id="app-header">
     <div class="header-brand">
-      <span class="header-title">PartnerFM</span>
+      <span class="header-title">Seegent</span>
     </div>
     <div class="header-segments">
       <button class="header-seg active" data-module="file">项目</button>
@@ -2793,7 +2793,7 @@ body {
             </button>
             <div id="welcome-page">
               <div class="welcome-icon"><svg width="36" height="36"><use href="#icon-folder-open"/></svg></div>
-              <h2>PartnerFM</h2>
+              <h2>Seegent</h2>
               <p class="welcome-subtitle">你的个人 AI 工作台</p>
 
 
@@ -2991,7 +2991,7 @@ body {
         <div class="mgmt-panel">
           <div class="page-header">
             <h2>本机 AI 用量</h2>
-            <p>监控本机所有 AI 工具的 Token 消耗，包括 PartnerFM 自身用量。</p>
+            <p>监控本机所有 AI 工具的 Token 消耗，包括 Seegent 自身用量。</p>
           </div>
           <div id="ai-token-section"></div>
           <div id="ai-token-history"></div>
@@ -3003,7 +3003,7 @@ body {
         <div class="mgmt-panel">
           <div class="page-header">
             <h2>操作日志</h2>
-            <p>记录 PartnerFM 每次 Agent 调用的任务、模型、轮次、工具、产出文件、Token、耗时、状态。</p>
+            <p>记录 Seegent 每次 Agent 调用的任务、模型、轮次、工具、产出文件、Token、耗时、状态。</p>
           </div>
           <div class="log-filter-bar">
             <select id="log-filter-agent" onchange="renderLogList()">
@@ -3370,7 +3370,7 @@ function openDB() {
 }
 
 // localStorage 后备：存储文件夹名称和 ID，IndexedDB 失败时至少能提示用户
-const LS_KEY = 'partnerfm-folders';
+const LS_KEY = 'seegent-folders';
 
 function saveToLocalStorage(id, name) {
   try {
@@ -3394,7 +3394,7 @@ function loadFromLocalStorage() {
   } catch (_) { return []; }
 }
 
-const ORDER_KEY = 'partnerfm-folder-order';
+const ORDER_KEY = 'seegent-folder-order';
 function saveFolderOrder() {
   localStorage.setItem(ORDER_KEY, JSON.stringify(state.folders.map(f => f.id)));
 }
@@ -3425,10 +3425,10 @@ async function saveFolderHandle(id, name, handle) {
     const tx = db.transaction('folders', 'readwrite');
     const store = tx.objectStore('folders');
     const req = store.put({ id, name, handle, addedAt: Date.now() });
-    req.onsuccess = () => console.log('[PartnerFM] 💾 已保存: ' + name);
-    req.onerror = (e) => { console.error('[PartnerFM] ❌ put 失败: ' + name, e.target.error); reject(e.target.error); };
-    tx.oncomplete = () => { console.log('[PartnerFM] 事务完成: ' + name); resolve(); };
-    tx.onerror = (e) => { console.error('[PartnerFM] 事务失败: ' + name, e.target.error); reject(e.target.error); };
+    req.onsuccess = () => console.log('[Seegent] 💾 已保存: ' + name);
+    req.onerror = (e) => { console.error('[Seegent] ❌ put 失败: ' + name, e.target.error); reject(e.target.error); };
+    tx.oncomplete = () => { console.log('[Seegent] 事务完成: ' + name); resolve(); };
+    tx.onerror = (e) => { console.error('[Seegent] 事务失败: ' + name, e.target.error); reject(e.target.error); };
   });
 }
 
@@ -3440,18 +3440,18 @@ async function getSavedFolders() {
     const req = store.getAll();
     req.onsuccess = () => {
       const result = req.result || [];
-      console.log('[PartnerFM] IndexedDB 读取: ' + result.length + ' 条记录');
+      console.log('[Seegent] IndexedDB 读取: ' + result.length + ' 条记录');
       // 验证 handle 是否有效：反序列化后应该仍是 FileSystemDirectoryHandle
       for (const r of result) {
         if (r.handle) {
           const valid = typeof r.handle.queryPermission === 'function';
-          console.log('[PartnerFM] handle 验证: ' + r.name + ' — ' + (valid ? '有效 ✅' : '无效 ❌ (类型=' + typeof r.handle + ')'));
+          console.log('[Seegent] handle 验证: ' + r.name + ' — ' + (valid ? '有效 ✅' : '无效 ❌ (类型=' + typeof r.handle + ')'));
           if (!valid) r.handle = null;
         }
       }
       resolve(result);
     };
-    req.onerror = (e) => { console.error('[PartnerFM] getAll 失败', e.target.error); reject(e.target.error); };
+    req.onerror = (e) => { console.error('[Seegent] getAll 失败', e.target.error); reject(e.target.error); };
   });
 }
 
@@ -3463,8 +3463,8 @@ async function removeSavedFolder(id) {
       const tx = db.transaction('folders', 'readwrite');
       const store = tx.objectStore('folders');
       store.delete(id);
-      tx.oncomplete = () => { console.log('[PartnerFM] 🗑️ 已移除: ' + id); resolve(); };
-      tx.onerror = (e) => { console.error('[PartnerFM] 删除失败', e.target.error); reject(e.target.error); };
+      tx.oncomplete = () => { console.log('[Seegent] 🗑️ 已移除: ' + id); resolve(); };
+      tx.onerror = (e) => { console.error('[Seegent] 删除失败', e.target.error); reject(e.target.error); };
     });
   } catch (_) {}
 }
@@ -3518,7 +3518,7 @@ const DOM_SELECTORS = {
 const dom = {};
 for (const [key, sel] of Object.entries(DOM_SELECTORS)) {
   dom[key] = document.querySelector(sel);
-  if (!dom[key]) console.warn('[PartnerFM] ⚠️ DOM 缺失: ' + key + ' ← ' + sel);
+  if (!dom[key]) console.warn('[Seegent] ⚠️ DOM 缺失: ' + key + ' ← ' + sel);
 }
 
 // ========== 工具函数 ==========
@@ -3679,7 +3679,7 @@ async function handleDrop(e) {
 }
 
 // ========== 子节点自定义排序持久化 ==========
-const CHILD_ORDER_KEY = 'partnerfm-child-orders';
+const CHILD_ORDER_KEY = 'seegent-child-orders';
 
 function loadChildOrders() {
   try { return JSON.parse(localStorage.getItem(CHILD_ORDER_KEY) || '{}'); }
@@ -4331,7 +4331,7 @@ async function saveFile(tab) {
   // ========== 截图方案（预置比例 + 自定义复用） ==========
   // 自定义方案存相对坐标（占原图百分比），跨不同尺寸内容都能正确还原
   // 结构：[{ id, name, x, y, w, h }]，x/y/w/h 均为 0~1 的小数
-  const SCHEME_KEY = 'partnerfm-screenshot-schemes';
+  const SCHEME_KEY = 'seegent-screenshot-schemes';
   function loadSchemes() {
     try { return JSON.parse(localStorage.getItem(SCHEME_KEY) || '[]'); }
     catch (_) { return []; }
@@ -6146,7 +6146,7 @@ function renderSplitView(leftTab, rightTab) {
     dom.statusLeft.textContent = '分屏：' + leftTab.name + ' | ' + rightTab.name;
     if (typeof window.__refreshScreenshotFab === 'function') window.__refreshScreenshotFab();
   } catch (e) {
-    console.error('[PartnerFM] 分屏渲染失败:', e);
+    console.error('[Seegent] 分屏渲染失败:', e);
     state.splitTabIds = null;
     dom.contentArea.classList.remove('split-mode');
     dom.contentArea.querySelectorAll('.split-pane, .split-divider').forEach(p => p.remove());
@@ -6632,7 +6632,7 @@ dom.sidebar.addEventListener('drop', async (e) => {
 });
 
 // ========== 主题切换 ==========
-const THEME_KEY = 'partnerfm-theme';
+const THEME_KEY = 'seegent-theme';
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -6657,49 +6657,49 @@ function toggleTheme() {
 let pendingRestore = []; // 需要用户手势重新授权的文件夹
 
 async function init() {
-  console.log('[PartnerFM] init() 开始...');
+  console.log('[Seegent] init() 开始...');
   pendingRestore = [];
 
   let saved = [];
   try {
     saved = await getSavedFolders();
-    console.log('[PartnerFM] IndexedDB 中找到 ' + saved.length + ' 个已保存的文件夹');
+    console.log('[Seegent] IndexedDB 中找到 ' + saved.length + ' 个已保存的文件夹');
   } catch (e) {
-    console.error('[PartnerFM] IndexedDB 读取失败: ' + e.message + '，将尝试 localStorage 恢复');
+    console.error('[Seegent] IndexedDB 读取失败: ' + e.message + '，将尝试 localStorage 恢复');
     // IndexedDB 不可用时，尝试从 localStorage 恢复（仅作为提示）
     saved = loadFromLocalStorage();
   }
 
   for (const { id, name, handle } of saved) {
     if (!handle) {
-      console.log('[PartnerFM] 跳过: handle 为 null — ' + name);
+      console.log('[Seegent] 跳过: handle 为 null — ' + name);
       continue;
     }
 
     try {
       const perm = await handle.queryPermission({ mode: 'readwrite' });
-      console.log('[PartnerFM] ' + handle.name + ' 权限: ' + perm);
+      console.log('[Seegent] ' + handle.name + ' 权限: ' + perm);
       if (perm === 'granted') {
         const folder = { id, name: handle.name, handle, path: null, children: [], expanded: true };
         state.folders.push(folder);
         await loadFolderChildren(folder);
-        console.log('[PartnerFM] ✅ 恢复: ' + handle.name);
+        console.log('[Seegent] ✅ 恢复: ' + handle.name);
       } else {
         // 非 granted 不删除，保留到 IndexedDB 等用户手势重新授权
         pendingRestore.push({ id, name, handle });
-        console.log('[PartnerFM] ⏳ 待授权: ' + handle.name + ' (perm=' + perm + ')');
+        console.log('[Seegent] ⏳ 待授权: ' + handle.name + ' (perm=' + perm + ')');
       }
     } catch (err) {
       // queryPermission 抛异常也保留，等用户手势重新授权
-      console.log('[PartnerFM] 错误: ' + err.message + ' — ' + (handle.name || 'unknown') + '，加入待授权');
+      console.log('[Seegent] 错误: ' + err.message + ' — ' + (handle.name || 'unknown') + '，加入待授权');
       pendingRestore.push({ id, name, handle });
     }
   }
 
-  console.log('[PartnerFM] 已恢复 ' + state.folders.length + ' 个，待授权 ' + pendingRestore.length + ' 个');
+  console.log('[Seegent] 已恢复 ' + state.folders.length + ' 个，待授权 ' + pendingRestore.length + ' 个');
 
   if (state.folders.length === 0 && pendingRestore.length === 0) {
-    const suggest = confirm('欢迎使用 PartnerFM！\n\n是否立即添加一个文件夹开始管理？');
+    const suggest = confirm('欢迎使用 Seegent！\n\n是否立即添加一个文件夹开始管理？');
     if (suggest) await addFolder();
   }
 
@@ -6712,7 +6712,7 @@ async function init() {
     showRestoreBanner();
   }
   
-  console.log('[PartnerFM] init() 完成');
+  console.log('[Seegent] init() 完成');
 }
 
 function showRestoreBanner() {
@@ -6797,12 +6797,12 @@ init().catch(console.error);
 <!-- ===== 模块管理与聊天功能 ===== -->
 <script>
 // ========== 模块切换 ==========
-let activeModule = localStorage.getItem('partnerfm-module') || 'file';
-let activeConfigTab = localStorage.getItem('partnerfm-config-tab') || 'model';
+let activeModule = localStorage.getItem('seegent-module') || 'file';
+let activeConfigTab = localStorage.getItem('seegent-config-tab') || 'model';
 
 function switchConfigTab(tabName) {
   activeConfigTab = tabName;
-  localStorage.setItem('partnerfm-config-tab', tabName);
+  localStorage.setItem('seegent-config-tab', tabName);
 
   // 切换子标签按钮样式
   document.querySelectorAll('.config-subtab').forEach(b =>
@@ -6832,7 +6832,7 @@ function switchConfigTab(tabName) {
 
 function switchModule(name) {
   activeModule = name;
-  localStorage.setItem('partnerfm-module', name);
+  localStorage.setItem('seegent-module', name);
   // 同步顶栏分段控件
   document.querySelectorAll('.header-seg').forEach(s => s.classList.toggle('active', s.dataset.module === name));
   // 切换内容面板
@@ -6851,7 +6851,7 @@ document.querySelectorAll('.header-seg').forEach(seg => {
 // ========== 模块切换结束 ==========
 setTimeout(() => {
   try {
-    const saved = localStorage.getItem('partnerfm-module');
+    const saved = localStorage.getItem('seegent-module');
     // 旧模块名映射：model/cli/mcp/agent → config
     const oldToNew = { model: 'config', cli: 'config', mcp: 'config', agent: 'config' };
     const actual = oldToNew[saved] || saved;
@@ -6996,7 +6996,7 @@ function toggleSidebar() {
   const restore = document.getElementById('sidebar-restore');
   const collapsed = sidebar.classList.toggle('collapsed');
   if (restore) restore.classList.toggle('show', collapsed);
-  localStorage.setItem('partnerfm-sidebar-collapsed', collapsed ? '1' : '0');
+  localStorage.setItem('seegent-sidebar-collapsed', collapsed ? '1' : '0');
 }
 
 // 初始化：恢复折叠状态
@@ -7011,7 +7011,7 @@ function toggleSidebar() {
   if (restoreBtn) restoreBtn.addEventListener('click', toggleSidebar);
 
   // 恢复持久化状态
-  if (localStorage.getItem('partnerfm-sidebar-collapsed') === '1') {
+  if (localStorage.getItem('seegent-sidebar-collapsed') === '1') {
     sidebar.classList.add('collapsed');
     if (restoreBtn) restoreBtn.classList.add('show');
   }
@@ -8449,8 +8449,8 @@ function openProjectMappingModal(editId) {
     '<div class="pm-box" style="width:540px">' +
       '<div class="pm-header"><h3>' + (m ? '编辑项目映射' : '新增项目映射') + '</h3><button class="pm-close" onclick="closeProjectMappingModal()"><svg width="18" height="18"><use href="#icon-close"/></svg></button></div>' +
       '<div class="pm-body">' +
-        '<div class="pm-field"><label class="pm-label">项目 ID（唯一标识）<span class="pm-required">*</span></label><input id="pmap-id" value="' + escapeHtml(editId || '') + '" placeholder="如 partnerfm" ' + (editId ? 'disabled style="background:#f5f5f5"' : '') + '></div>' +
-        '<div class="pm-field"><label class="pm-label">项目名称 <span class="pm-required">*</span></label><input id="pmap-name" value="' + escapeHtml(m ? m.projectName : '') + '" placeholder="如 PartnerFM"></div>' +
+        '<div class="pm-field"><label class="pm-label">项目 ID（唯一标识）<span class="pm-required">*</span></label><input id="pmap-id" value="' + escapeHtml(editId || '') + '" placeholder="如 seegent" ' + (editId ? 'disabled style="background:#f5f5f5"' : '') + '></div>' +
+        '<div class="pm-field"><label class="pm-label">项目名称 <span class="pm-required">*</span></label><input id="pmap-name" value="' + escapeHtml(m ? m.projectName : '') + '" placeholder="如 Seegent"></div>' +
         '<div class="pm-field"><label class="pm-label">项目图标</label><input id="pmap-icon" value="' + escapeHtml(m ? m.projectIcon : '') + '" placeholder="🤖" style="width:60px;text-align:center;font-size:20px"></div>' +
         '<div class="pm-field"><label class="pm-label">工作区路径</label><input id="pmap-workspace" value="' + escapeHtml(m ? m.workspaceDir : '') + '" placeholder="/Users/xxx/project"></div>' +
         '<div class="pm-field"><label class="pm-label">产出目录</label><input id="pmap-outdir" value="' + escapeHtml(m ? m.outputDir : '') + '" placeholder="产出/项目名"></div>' +
@@ -9424,7 +9424,7 @@ async function feishuParseUrl() {
       resultDiv.style.display = 'block';
       resultDiv.style.background = 'var(--bg-warning)';
       resultDiv.style.color = 'var(--text-warning)';
-      resultDiv.innerHTML = '未找到域名 <b>' + escapeHtml(d.domain) + '</b> 的飞书凭证。<br>请编辑文件 <b>PartnerFM/.partnerfm-feishu-credentials.json</b>，写入：<br><pre style="margin-top:4px;font-size:11px;color:var(--text-secondary)">{</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">  "credentials": {</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">    "我的飞书": {</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "domain": "' + escapeHtml(d.domain) + '",</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "appId": "cli_xxx",</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "appSecret": "你的密钥"</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">    }</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">  }</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">}</pre>';
+      resultDiv.innerHTML = '未找到域名 <b>' + escapeHtml(d.domain) + '</b> 的飞书凭证。<br>请编辑文件 <b>Seegent/.seegent-feishu-credentials.json</b>，写入：<br><pre style="margin-top:4px;font-size:11px;color:var(--text-secondary)">{</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">  "credentials": {</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">    "我的飞书": {</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "domain": "' + escapeHtml(d.domain) + '",</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "appId": "cli_xxx",</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">      "appSecret": "你的密钥"</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">    }</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">  }</pre><pre style="margin:0;font-size:11px;color:var(--text-secondary)">}</pre>';
       btn.textContent = '解析链接并提取字段';
       btn.disabled = false;
       return;
@@ -10408,7 +10408,7 @@ async function guessFolderPath(folderName) {
       if (parent) return parent + '/' + folderName;
     }
   } catch (_) {}
-  return '~/PartnerFM/' + folderName;
+  return '~/Seegent/' + folderName;
 }
 
 function removeFromChatContext(idx) {
@@ -10476,7 +10476,7 @@ async function collectFolderTexts(dirHandle, depth) {
 
 // ========== Agent 模式 ==========
 let agentMode = false;
-const AGENT_MODE_KEY = 'partnerfm-agent-mode';
+const AGENT_MODE_KEY = 'seegent-agent-mode';
 
 // 每个对话独立的 AbortController：key=sessionId，value=AbortController
 // 这样多对话之间互不干扰——在 A 对话打断不会切到 B 的请求
@@ -11035,7 +11035,7 @@ async function handleChatStream(resp, session, abortSignal) {
         if (!jsonStr || jsonStr === '[DONE]') { currentEvent = ''; continue; }
         try {
           const chunk = JSON.parse(jsonStr);
-          // PartnerFM SSE format: event: error / data: {"message":"..."}
+          // Seegent SSE format: event: error / data: {"message":"..."}
           if (currentEvent === 'error') {
             fullContent = '❌ ' + (chunk.message || jsonStr);
             msgEl.className = 'chat-msg error';

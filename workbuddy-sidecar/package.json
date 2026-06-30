@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-sidecar",
   "version": "1.0.0",
-  "description": "WorkBuddy Agent SDK sidecar for PartnerFM",
+  "description": "WorkBuddy Agent SDK sidecar for Seegent",
   "private": true,
   "type": "module",
   "scripts": {

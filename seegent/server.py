@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PartnerFM local server — serves static files, persists state, proxies LLM calls."""
+"""Seegent local server — serves static files, persists state, proxies LLM calls."""
 
 import json
 import os
@@ -36,43 +36,43 @@ STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
 
 def _get_data_dir():
-    """数据目录：pip 安装 → ~/.partnerfm/；源码运行 → 项目根目录。"""
-    env = os.environ.get('PARTNERFM_DATA_DIR')
+    """数据目录：pip 安装 → ~/.seegent/；源码运行 → 项目根目录。"""
+    env = os.environ.get('SEEGENT_DATA_DIR')
     if env:
         return os.path.expanduser(env)
     if 'site-packages' in __file__ or 'dist-packages' in __file__:
-        return os.path.join(os.path.expanduser('~'), '.partnerfm')
-    # 源码运行 — server.py 在 partnerfm/ 下，上溯一级到项目根
+        return os.path.join(os.path.expanduser('~'), '.seegent')
+    # 源码运行 — server.py 在 seegent/ 下，上溯一级到项目根
     return os.path.dirname(BASE_DIR)
 
 
 DATA_DIR = _get_data_dir()
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-STATE_FILE = os.path.join(DATA_DIR, '.partnerfm-state.json')
-MODELS_FILE = os.path.join(DATA_DIR, '.partnerfm-models.json')
-ENGINES_FILE = os.path.join(DATA_DIR, '.partnerfm-engines.json')
-CLI_FILE = os.path.join(DATA_DIR, '.partnerfm-cli.json')
-MCP_FILE = os.path.join(DATA_DIR, '.partnerfm-mcp.json')
-CHAT_FILE = os.path.join(DATA_DIR, '.partnerfm-chats.json')
-PROMPTS_FILE = os.path.join(DATA_DIR, '.partnerfm-prompts.json')
-WORKSPACES_FILE = os.path.join(DATA_DIR, '.partnerfm-workspaces.json')
-SKILLS_FILE = os.path.join(DATA_DIR, '.partnerfm-skills.json')
-ROLES_FILE = os.path.join(DATA_DIR, '.partnerfm-roles.json')
-EMBEDDING_FILE = os.path.join(DATA_DIR, '.partnerfm-embedding.json')
-INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
-AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
-PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
-LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
-TIMING_FILE = os.path.join(DATA_DIR, '.partnerfm-timing.txt')
-USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
-TRACKS_FILE = os.path.join(DATA_DIR, '.partnerfm-tracks.json')
-PROJECTS_FILE = os.path.join(DATA_DIR, '.partnerfm-projects.json')
+STATE_FILE = os.path.join(DATA_DIR, '.seegent-state.json')
+MODELS_FILE = os.path.join(DATA_DIR, '.seegent-models.json')
+ENGINES_FILE = os.path.join(DATA_DIR, '.seegent-engines.json')
+CLI_FILE = os.path.join(DATA_DIR, '.seegent-cli.json')
+MCP_FILE = os.path.join(DATA_DIR, '.seegent-mcp.json')
+CHAT_FILE = os.path.join(DATA_DIR, '.seegent-chats.json')
+PROMPTS_FILE = os.path.join(DATA_DIR, '.seegent-prompts.json')
+WORKSPACES_FILE = os.path.join(DATA_DIR, '.seegent-workspaces.json')
+SKILLS_FILE = os.path.join(DATA_DIR, '.seegent-skills.json')
+ROLES_FILE = os.path.join(DATA_DIR, '.seegent-roles.json')
+EMBEDDING_FILE = os.path.join(DATA_DIR, '.seegent-embedding.json')
+INDEX_DB = os.path.join(DATA_DIR, '.seegent-index.db')
+AGENTS_FILE = os.path.join(DATA_DIR, '.seegent-agents.json')
+PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.seegent-project-agents.json')
+LOG_FILE = os.path.join(DATA_DIR, '.seegent-logs.json')
+TIMING_FILE = os.path.join(DATA_DIR, '.seegent-timing.txt')
+USAGE_FILE = os.path.join(DATA_DIR, '.seegent-usage.json')
+TRACKS_FILE = os.path.join(DATA_DIR, '.seegent-tracks.json')
+PROJECTS_FILE = os.path.join(DATA_DIR, '.seegent-projects.json')
 
 # ===== 飞书凭证配置 =====
-FEISHU_CREDENTIALS_FILE = os.path.join(DATA_DIR, '.partnerfm-feishu-credentials.json')
+FEISHU_CREDENTIALS_FILE = os.path.join(DATA_DIR, '.seegent-feishu-credentials.json')
 
 # ===== 数据源注册表 =====
-DATASOURCES_FILE = os.path.join(DATA_DIR, '.partnerfm-datasources.json')
+DATASOURCES_FILE = os.path.join(DATA_DIR, '.seegent-datasources.json')
 
 # ===== 看板配置（按项目隔离）=====
 DASHBOARD_DIR = os.path.join(DATA_DIR, 'dashboards')
@@ -122,31 +122,31 @@ try:
 except ImportError:
     _DOCX_AVAILABLE = False
 
-# Default CLI registry — what CLIs PartnerFM knows about
+# Default CLI registry — what CLIs Seegent knows about
 DEFAULT_CLI = {
     "cursor-agent": {
         "name": "Cursor Agent",
         "path": "/Applications/Cursor.app/Contents/Resources/app/bin/cursor agent",
         "description": "Cursor 编辑器的 AI 编程代理，支持 print 模式和交互模式。安装 Cursor 编辑器后可用。",
-        "tutorial": "## 使用方式\n\n**Print 模式（推荐）：**\n```bash\ncursor agent -p \"你的任务\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\ncursor agent \"你的任务\"\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「用 Cursor Agent 帮我写一个 xxx」，主 Agent 会通过 run_shell 工具执行 cursor 命令。"
+        "tutorial": "## 使用方式\n\n**Print 模式（推荐）：**\n```bash\ncursor agent -p \"你的任务\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\ncursor agent \"你的任务\"\n```\n\n**在 Seegent 中调用：**\n在聊天中说「用 Cursor Agent 帮我写一个 xxx」，主 Agent 会通过 run_shell 工具执行 cursor 命令。"
     },
     "hermes-agent": {
         "name": "Hermes Agent",
         "path": "hermes",
         "description": "多平台 AI 代理，支持 20+ 大模型提供商，消息平台网关。",
-        "tutorial": "## 使用方式\n\n**单次查询：**\n```bash\nhermes chat -q \"你的问题\"\n```\n\n**交互模式：**\n```bash\nhermes\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「用 Hermes 帮我查 xxx」，主 Agent 会通过 run_shell 工具执行 hermes 命令。"
+        "tutorial": "## 使用方式\n\n**单次查询：**\n```bash\nhermes chat -q \"你的问题\"\n```\n\n**交互模式：**\n```bash\nhermes\n```\n\n**在 Seegent 中调用：**\n在聊天中说「用 Hermes 帮我查 xxx」，主 Agent 会通过 run_shell 工具执行 hermes 命令。"
     },
     "claude-code": {
         "name": "Claude Code",
         "path": "claude",
         "description": "Anthropic 官方 CLI AI 编程助手，完整的代码理解、重构、调试能力，支持多文件编辑。",
-        "tutorial": "## 使用方式\n\n**单次任务（print 模式）：**\n```bash\nclaude -p \"重构这个文件\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\nclaude\n```\n\n**安装：**\n```bash\nnpm install -g @anthropic-ai/claude-code\n```\n\n**在 PartnerFM 中调用：**\n在聊天中说「让 Claude Code 帮我 xxx」，主 Agent 会通过 run_shell 执行 claude 命令。"
+        "tutorial": "## 使用方式\n\n**单次任务（print 模式）：**\n```bash\nclaude -p \"重构这个文件\" --workspace ~/project\n```\n\n**交互模式：**\n```bash\nclaude\n```\n\n**安装：**\n```bash\nnpm install -g @anthropic-ai/claude-code\n```\n\n**在 Seegent 中调用：**\n在聊天中说「让 Claude Code 帮我 xxx」，主 Agent 会通过 run_shell 执行 claude 命令。"
     },
     "workbuddy": {
         "name": "WorkBuddy",
         "path": "node workbuddy-sidecar/server.js",
-        "description": "腾讯 AI Agent SDK 侧车，已桥接到 PartnerFM。启动侧车后，在模型选择器选「WorkBuddy Agent」使用。",
-        "tutorial": "## 架构\n\nWorkBuddy 是独立 Node.js 进程，通过 SSE 桥接到 PartnerFM。\n\n## 启动方式\n\n```bash\ncd workbuddy-sidecar\nnpm install\nnode server.js\n```\n\n## 在 PartnerFM 中调用\n\n**方式一（直接）：** 聊天窗口模型选择器选「WorkBuddy Agent」，直接对话。\n**方式二（调度）：** 在聊天中说「让 WorkBuddy 帮我 xxx」。"
+        "description": "腾讯 AI Agent SDK 侧车，已桥接到 Seegent。启动侧车后，在模型选择器选「WorkBuddy Agent」使用。",
+        "tutorial": "## 架构\n\nWorkBuddy 是独立 Node.js 进程，通过 SSE 桥接到 Seegent。\n\n## 启动方式\n\n```bash\ncd workbuddy-sidecar\nnpm install\nnode server.js\n```\n\n## 在 Seegent 中调用\n\n**方式一（直接）：** 聊天窗口模型选择器选「WorkBuddy Agent」，直接对话。\n**方式二（调度）：** 在聊天中说「让 WorkBuddy 帮我 xxx」。"
     }
 }
 
@@ -157,21 +157,21 @@ DEFAULT_MCP = {
         "icon": "🌐",
         "description": "获取网页内容、搜索信息、提取数据",
         "command": "npx -y @modelcontextprotocol/server-fetch",
-        "tutorial": "## 功能\n\n- 获取网页内容\n- 网页搜索\n\n**在 PartnerFM 中：** 在聊天窗口直接问，我会用 web_search 工具帮你查。"
+        "tutorial": "## 功能\n\n- 获取网页内容\n- 网页搜索\n\n**在 Seegent 中：** 在聊天窗口直接问，我会用 web_search 工具帮你查。"
     },
     "feishu": {
         "name": "飞书",
         "icon": "🐦",
         "description": "飞书官方 OpenAPI MCP——发送消息、创建文档、管理日历、通讯录等，需配置应用凭证",
         "command": "npx -y @larksuiteoapi/lark-mcp --app-id <your_app_id> --app-secret <your_app_secret>",
-        "tutorial": "## 连接飞书\n\n飞书官方 MCP 服务器（`@larksuiteoapi/lark-mcp`），连接后 AI 可真实操作飞书：发消息、建文档、读通讯录、管日历等。\n\n### 配置步骤\n1. 前往 [飞书开放平台](https://open.feishu.cn/) 创建一个**自建应用**\n2. 在「凭证与基础信息」中复制 **App ID**（形如 `cli_xxxxxxxx`）和 **App Secret**\n3. 在「权限管理」中按需开启权限范围（如发消息需 `im:message`、建文档需 `docx:document` 等）\n4. 编辑上方「启动命令」，把 `<your_app_id>` 和 `<your_app_secret>` 替换为真实凭证\n5. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` / `create_message` — 发送消息\n- `create_doc` / `create_document` — 创建云文档\n- `list_users` / `get_user` — 通讯录查询\n- `create_event` — 创建日历事件\n\n> App Secret 是敏感信息，仅保存在本地 `.partnerfm-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
+        "tutorial": "## 连接飞书\n\n飞书官方 MCP 服务器（`@larksuiteoapi/lark-mcp`），连接后 AI 可真实操作飞书：发消息、建文档、读通讯录、管日历等。\n\n### 配置步骤\n1. 前往 [飞书开放平台](https://open.feishu.cn/) 创建一个**自建应用**\n2. 在「凭证与基础信息」中复制 **App ID**（形如 `cli_xxxxxxxx`）和 **App Secret**\n3. 在「权限管理」中按需开启权限范围（如发消息需 `im:message`、建文档需 `docx:document` 等）\n4. 编辑上方「启动命令」，把 `<your_app_id>` 和 `<your_app_secret>` 替换为真实凭证\n5. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` / `create_message` — 发送消息\n- `create_doc` / `create_document` — 创建云文档\n- `list_users` / `get_user` — 通讯录查询\n- `create_event` — 创建日历事件\n\n> App Secret 是敏感信息，仅保存在本地 `.seegent-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
     },
     "wecom": {
         "name": "企业微信",
         "icon": "💼",
         "description": "企业微信官方 MCP——发送消息、管理通讯录、客户联系、会话存档等，需配置企业凭证",
         "command": "npx -y @anthropic/mcp-server-wecom --corp-id <your_corp_id> --corp-secret <your_corp_secret>",
-        "tutorial": "## 连接企业微信\n\n企业微信 MCP 服务器，连接后 AI 可真实操作企业微信：发消息、查通讯录、管理客户等。\n\n### 配置步骤\n1. 前往 [企业微信管理后台](https://work.weixin.qq.com/) 登录管理员账号\n2. 在「我的企业」→「企业信息」底部复制 **企业 ID**（Corp ID，形如 `wwxxxxxxxxxxxxxxxx`）\n3. 在「应用管理」→「自建」中创建一个**自建应用**\n4. 在自建应用的详情页复制 **Secret**（Corp Secret）\n5. 在「企业微信授权配置」中设置可信域名和授权回调\n6. 编辑上方「启动命令」，把 `<your_corp_id>` 和 `<your_corp_secret>` 替换为真实凭证\n7. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` — 发送应用消息（文本/图文/卡片等）\n- `list_users` / `get_user` — 通讯录查询\n- `list_departments` — 部门管理\n- `create_group` — 创建群聊\n- `external_contact` — 客户联系管理\n\n> Corp Secret 是敏感信息，仅保存在本地 `.partnerfm-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
+        "tutorial": "## 连接企业微信\n\n企业微信 MCP 服务器，连接后 AI 可真实操作企业微信：发消息、查通讯录、管理客户等。\n\n### 配置步骤\n1. 前往 [企业微信管理后台](https://work.weixin.qq.com/) 登录管理员账号\n2. 在「我的企业」→「企业信息」底部复制 **企业 ID**（Corp ID，形如 `wwxxxxxxxxxxxxxxxx`）\n3. 在「应用管理」→「自建」中创建一个**自建应用**\n4. 在自建应用的详情页复制 **Secret**（Corp Secret）\n5. 在「企业微信授权配置」中设置可信域名和授权回调\n6. 编辑上方「启动命令」，把 `<your_corp_id>` 和 `<your_corp_secret>` 替换为真实凭证\n7. 保存后点「🔍 发现工具」，状态灯变绿即连接成功\n\n### 常见工具（连接成功后 AI 可自动调用）\n- `send_message` — 发送应用消息（文本/图文/卡片等）\n- `list_users` / `get_user` — 通讯录查询\n- `list_departments` — 部门管理\n- `create_group` — 创建群聊\n- `external_contact` — 客户联系管理\n\n> Corp Secret 是敏感信息，仅保存在本地 `.seegent-mcp.json`（已被 `.gitignore` 忽略），绝不上传。"
     }
 }
 
@@ -290,7 +290,7 @@ class McpClient:
         result = self._send_request('initialize', {
             'protocolVersion': '2024-11-05',
             'capabilities': {},
-            'clientInfo': {'name': 'PartnerFM', 'version': '1.0.0'}
+            'clientInfo': {'name': 'Seegent', 'version': '1.0.0'}
         }, timeout=60)
         if 'error' in result:
             return result['error']
@@ -749,7 +749,7 @@ WORKFLOW_TEMPLATES = {
 
 # workspace 路径关键字 → 项目 ID 映射（日志导入自动推断）
 WORKSPACE_PROJECT_MAP = {
-    'partnerfm': 'partnerfm',
+    'seegent': 'seegent',
     'learnchinese': 'learn-chinese',
     'learn_chinese': 'learn-chinese',
     '识字': 'shizi-app',
@@ -1080,7 +1080,7 @@ def _count_ai_calls():
     except Exception:
         pass
 
-    # PartnerFM 通过 shell 调用外部 CLI 的次数（扫用量记录中 agentId 为 cli/rest）
+    # Seegent 通过 shell 调用外部 CLI 的次数（扫用量记录中 agentId 为 cli/rest）
     try:
         data = _load_json(USAGE_FILE, {'usage': []})
         cli_calls = sum(1 for e in data.get('usage', []) if e.get('agentId') in ('cli', 'rest'))
@@ -1196,13 +1196,13 @@ def _scan_local_tokens():
         if d:
             mbyd[d] = mbyd.get(d, 0) + real
 
-    # ---- Merge PartnerFM own usage into token stats ----
+    # ---- Merge Seegent own usage into token stats ----
     pfm_data = _load_json(USAGE_FILE, {'usage': []})
     pfm_entries = pfm_data.get('usage', [])
     if pfm_entries:
         pfm_tool = {
-            'id': 'partnerfm',
-            'name': 'PartnerFM',
+            'id': 'seegent',
+            'name': 'Seegent',
             'total': 0, 'input': 0, 'output': 0,
             'cacheRead': 0, 'cacheWrite': 0, 'records': 0,
             'byDate': {}, 'byModel': {},
@@ -1219,13 +1219,13 @@ def _scan_local_tokens():
             if d:
                 pfm_tool['byDate'][d] = pfm_tool['byDate'].get(d, 0) + tv
             pfm_tool['byModel'][mdl] = pfm_tool['byModel'].get(mdl, 0) + tv
-            # global model aggregation for PartnerFM
+            # global model aggregation for Seegent
             global_by_model[mdl] = global_by_model.get(mdl, 0) + tv
             global_model_records[mdl] = global_model_records.get(mdl, 0) + 1
             mbyd = global_model_by_date.setdefault(mdl, {})
             if d:
                 mbyd[d] = mbyd.get(d, 0) + tv
-        tools_map['partnerfm'] = pfm_tool
+        tools_map['seegent'] = pfm_tool
 
     # ---- Build global model breakdown list ----
     model_breakdown = []
@@ -1472,7 +1472,7 @@ def _extract_doc_text(filepath):
     lo_path = _find_libreoffice()
     if not lo_path:
         return ''
-    tmpdir = tempfile.mkdtemp(prefix='partnerfm-doc-')
+    tmpdir = tempfile.mkdtemp(prefix='seegent-doc-')
     try:
         result = subprocess.run(
             [lo_path, '--headless', '--convert-to', 'pdf', '--outdir', tmpdir, filepath],
@@ -2097,7 +2097,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         # Save to temp directory and convert
-        tmpdir = tempfile.mkdtemp(prefix='partnerfm-')
+        tmpdir = tempfile.mkdtemp(prefix='seegent-')
         try:
             input_path = os.path.join(tmpdir, filename)
             with open(input_path, 'wb') as f:
@@ -2175,7 +2175,7 @@ class Handler(SimpleHTTPRequestHandler):
         - rest    → 代理到 LLM API（DeepSeek/OpenAI/Claude）
         - sidecar → 转发到侧车进程（WorkBuddy）
         - cli     → 子进程调用（Hermes/Claude Code）
-        - agent   → 内置 Agent 循环（PartnerFM Agent）
+        - agent   → 内置 Agent 循环（Seegent Agent）
         无 engine 参数 → 兼容旧模式（从 body 读取 api_key/base_url）
         """
         from urllib.parse import urlparse, parse_qs
@@ -4896,32 +4896,32 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def run_server(host='127.0.0.1', port=8765, data_dir=None, open_browser=False):
-    """启动 PartnerFM 服务器（程序化调用入口）。"""
+    """启动 Seegent 服务器（程序化调用入口）。"""
     global DATA_DIR, STATE_FILE, MODELS_FILE, ENGINES_FILE, CLI_FILE, MCP_FILE
     global CHAT_FILE, PROMPTS_FILE, WORKSPACES_FILE, SKILLS_FILE, ROLES_FILE
     global EMBEDDING_FILE, INDEX_DB, DATA_PLATFORMS_FILE, AGENTS_FILE
     global PROJECT_AGENTS_FILE, LOG_FILE, USAGE_FILE
 
     if data_dir:
-        os.environ['PARTNERFM_DATA_DIR'] = data_dir
+        os.environ['SEEGENT_DATA_DIR'] = data_dir
         DATA_DIR = _get_data_dir()
-        STATE_FILE = os.path.join(DATA_DIR, '.partnerfm-state.json')
-        MODELS_FILE = os.path.join(DATA_DIR, '.partnerfm-models.json')
-        ENGINES_FILE = os.path.join(DATA_DIR, '.partnerfm-engines.json')
-        CLI_FILE = os.path.join(DATA_DIR, '.partnerfm-cli.json')
-        MCP_FILE = os.path.join(DATA_DIR, '.partnerfm-mcp.json')
-        CHAT_FILE = os.path.join(DATA_DIR, '.partnerfm-chats.json')
-        PROMPTS_FILE = os.path.join(DATA_DIR, '.partnerfm-prompts.json')
-        WORKSPACES_FILE = os.path.join(DATA_DIR, '.partnerfm-workspaces.json')
-        SKILLS_FILE = os.path.join(DATA_DIR, '.partnerfm-skills.json')
-        ROLES_FILE = os.path.join(DATA_DIR, '.partnerfm-roles.json')
-        EMBEDDING_FILE = os.path.join(DATA_DIR, '.partnerfm-embedding.json')
-        INDEX_DB = os.path.join(DATA_DIR, '.partnerfm-index.db')
-        DATA_PLATFORMS_FILE = os.path.join(DATA_DIR, '.partnerfm-data-platforms.json')
-        AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-agents.json')
-        PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.partnerfm-project-agents.json')
-        LOG_FILE = os.path.join(DATA_DIR, '.partnerfm-logs.json')
-        USAGE_FILE = os.path.join(DATA_DIR, '.partnerfm-usage.json')
+        STATE_FILE = os.path.join(DATA_DIR, '.seegent-state.json')
+        MODELS_FILE = os.path.join(DATA_DIR, '.seegent-models.json')
+        ENGINES_FILE = os.path.join(DATA_DIR, '.seegent-engines.json')
+        CLI_FILE = os.path.join(DATA_DIR, '.seegent-cli.json')
+        MCP_FILE = os.path.join(DATA_DIR, '.seegent-mcp.json')
+        CHAT_FILE = os.path.join(DATA_DIR, '.seegent-chats.json')
+        PROMPTS_FILE = os.path.join(DATA_DIR, '.seegent-prompts.json')
+        WORKSPACES_FILE = os.path.join(DATA_DIR, '.seegent-workspaces.json')
+        SKILLS_FILE = os.path.join(DATA_DIR, '.seegent-skills.json')
+        ROLES_FILE = os.path.join(DATA_DIR, '.seegent-roles.json')
+        EMBEDDING_FILE = os.path.join(DATA_DIR, '.seegent-embedding.json')
+        INDEX_DB = os.path.join(DATA_DIR, '.seegent-index.db')
+        DATA_PLATFORMS_FILE = os.path.join(DATA_DIR, '.seegent-data-platforms.json')
+        AGENTS_FILE = os.path.join(DATA_DIR, '.seegent-agents.json')
+        PROJECT_AGENTS_FILE = os.path.join(DATA_DIR, '.seegent-project-agents.json')
+        LOG_FILE = os.path.join(DATA_DIR, '.seegent-logs.json')
+        USAGE_FILE = os.path.join(DATA_DIR, '.seegent-usage.json')
 
     # 确保数据目录存在
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -4942,7 +4942,7 @@ def run_server(host='127.0.0.1', port=8765, data_dir=None, open_browser=False):
     _load_json(USAGE_FILE, {'usage': []})
 
     url = f'http://localhost:{port}' if host == '127.0.0.1' else f'http://{host}:{port}'
-    print(f'PartnerFM → {url}')
+    print(f'Seegent → {url}')
 
     if open_browser:
         import webbrowser

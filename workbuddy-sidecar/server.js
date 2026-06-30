@@ -1,14 +1,14 @@
 /**
  * WorkBuddy Sidecar — Node.js HTTP SSE 服务器
  *
- * 桥接 PartnerFM（Python 后端）与 @tencent-ai/agent-sdk
+ * 桥接 Seegent（Python 后端）与 @tencent-ai/agent-sdk
  *
  * 使用方式：
  *   1. cd workbuddy-sidecar && npm install
  *   2. node server.js
  *   （默认监听 localhost:9876）
  *
- * 安全提示：sidecar 默认只绑定 127.0.0.1，仅 PartnerFM 后端的
+ * 安全提示：sidecar 默认只绑定 127.0.0.1，仅 Seegent 后端的
  * /api/workbuddy 路由可以访问，不对外暴露。
  */
 
@@ -76,7 +76,7 @@ async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   const path = url.pathname;
 
-  // CORS — 允许 PartnerFM 后端（或开发时的前端直连）
+  // CORS — 允许 Seegent 后端（或开发时的前端直连）
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

@@ -1,4 +1,4 @@
-# PartnerFM 多智能体协作平台 — 产品需求文档
+# Seegent 多智能体协作平台 — 产品需求文档
 
 > **版本**: v0.1 | **状态**: 草案 | **更新**: 2026-06-22
 >
@@ -8,7 +8,7 @@
 
 ## 1. 问题陈述
 
-**用户场景**：用户在 PartnerFM 中需要通过"对话"的方式，灵活调度多个 AI 智能体来完成复杂工作流——例如"让代码助手写一个排序算法"、"让文案助手把它写成博客"、"让数据分析师分析用户行为数据"——并在同一个平台内查看所有产物（MD 文档、HTML 页面、SVG 图表、PNG 图片）。
+**用户场景**：用户在 Seegent 中需要通过"对话"的方式，灵活调度多个 AI 智能体来完成复杂工作流——例如"让代码助手写一个排序算法"、"让文案助手把它写成博客"、"让数据分析师分析用户行为数据"——并在同一个平台内查看所有产物（MD 文档、HTML 页面、SVG 图表、PNG 图片）。
 
 **当前缺陷**：
 - 当前 Agent 是**单体的**，只有一个上下文循环，无法在同一个对话中调用不同的"角色+模型+工具集"组合
@@ -53,7 +53,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    PartnerFM UI                        │
+│                    Seegent UI                        │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐ │
 │  │ 聊天窗口     │  │ Agent 管理    │  │ 文件管理      │ │
 │  │ (多会话)     │  │ (注册/编辑)   │  │ (预览/搜索)   │ │
@@ -61,7 +61,7 @@
 └─────────┼────────────────┼──────────────────┼─────────┘
           │ SSE            │ REST            │ File API
 ┌─────────▼────────────────▼──────────────────▼─────────┐
-│          PartnerFM Server (Python HTTP Server)         │
+│          Seegent Server (Python HTTP Server)         │
 │                                                        │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │         Agent Orchestrator（编排层）               │  │
@@ -119,7 +119,7 @@
 
 ## 5. 数据模型
 
-### 5.1 Agent 注册表 `AGENTS_FILE`（`.partnerfm-agents.json`）
+### 5.1 Agent 注册表 `AGENTS_FILE`（`.seegent-agents.json`）
 
 ```json
 {
@@ -216,7 +216,7 @@
 
 ### 5.2 Project-Agent 映射表
 
-存储在 `PARTNERFM_DIR/.partnerfm-project-agents.json`：
+存储在 `SEEGENT_DIR/.seegent-project-agents.json`：
 
 ```json
 {
@@ -232,14 +232,14 @@
       "outputDir": "产出/LearnChinese"
     },
     {
-      "projectId": "partnerfm",
-      "projectName": "PartnerFM（智能体工作站）",
+      "projectId": "seegent",
+      "projectName": "Seegent（智能体工作站）",
       "projectIcon": "🤖",
       "description": "多人在线聊天智能体工作站，本平台自身",
       "agentIds": ["code-assistant", "drawing-assistant", "data-analyst"],
       "defaultAgentId": "code-assistant",
-      "workspaceDir": "/path/to/PartnerFM",
-      "outputDir": "产出/PartnerFM"
+      "workspaceDir": "/path/to/Seegent",
+      "outputDir": "产出/Seegent"
     },
     {
       "projectId": "word-learning",
@@ -252,7 +252,7 @@
       "outputDir": "产出/示例工具"
     }
   ],
-  "activeProjectId": "partnerfm"
+  "activeProjectId": "seegent"
 }
 ```
 
@@ -393,7 +393,7 @@
       "outputDir": "产出/LearnChinese"
     }
   ],
-  "activeProjectId": "partnerfm"
+  "activeProjectId": "seegent"
 }
 ```
 
@@ -427,7 +427,7 @@
 |----|---------|---------|
 | US-011 | **作为用户**，我希望多个子 Agent 可以并行执行（如"同时查资料 + 写代码 + 审代码"） | [ ] invoke_agent 支持 `mode: "parallel"`<br>[ ] 多个子 Agent 同时运行，结果合并返回 |
 | US-012 | **作为用户**，我希望可以编排一个工作流模板（如"写代码 → 审查 → 生成文档"）并一键触发 | [ ] 创建 Agent 工作流模板<br>[ ] 模板有向无环图（DAG）式编排 |
-| US-013 | **作为用户**，Agent 的资产可以导出/导入为 JSON 文件，方便分享 | [ ] 导出按钮生成 `.partnerfm-agent.json` 文件<br>[ ] 导入自动注册到 Agent 列表 |
+| US-013 | **作为用户**，Agent 的资产可以导出/导入为 JSON 文件，方便分享 | [ ] 导出按钮生成 `.seegent-agent.json` 文件<br>[ ] 导入自动注册到 Agent 列表 |
 
 ---
 
@@ -437,7 +437,7 @@
 
 | 编号 | 模块 | 需求描述 | 实现提示 |
 |------|------|---------|---------|
-| R-001 | 后端 | **Agent 注册表存储**：在 `.partnerfm-agents.json` 文件中存储 Agent 定义，使用 `AGENTS_FILE` 常量指向 `os.path.join(BASE_DIR, '.partnerfm-agents.json')` | 参考现有 `MODELS_FILE` 的读写模式，新增 `_load_json`/`_save_json` 调用 |
+| R-001 | 后端 | **Agent 注册表存储**：在 `.seegent-agents.json` 文件中存储 Agent 定义，使用 `AGENTS_FILE` 常量指向 `os.path.join(BASE_DIR, '.seegent-agents.json')` | 参考现有 `MODELS_FILE` 的读写模式，新增 `_load_json`/`_save_json` 调用 |
 | R-002 | 后端 | **`invoke_agent` 工具实现**：在主 Agent 的工具列表中添加特殊工具，调用时：1. 查找 agentId 在注册表中是否存在 2. 创建一个新的 Agent 会话（独立的 messages 列表） 3. 使用该 Agent 的模型/api_key 4. 用该 Agent 的 systemPrompt + tools 白名单 5. 执行 6. 收集结果返回 | 核心改动在 `_agent_loop` 中 new function `_invoke_agent(agentId, task, context)` |
 | R-003 | 后端 | **子 Agent 执行隔离**：子 Agent 共享父 Agent 的 api_key 和 base_url，但使用自己的 model 和 systemPrompt。子 Agent 的 tools 仅限于其白名单中的工具 | 实现时复用 `_agent_loop` 的 LLM 调用逻辑，但替换 messages/tools |
 | R-004 | 后端 | **产物自动保存**：子 Agent 执行结束后，扫描其 `write_file` 调用和最终响应中的代码块，自动生成文件路径：`{workspace}/{allowedOutputDir}/{timestamp}_{name}` | 在 `_exec_tool` 中拦截 `write_file`，记录写入了哪些文件 |
@@ -585,8 +585,8 @@
 server.py  — 新增常量、新增 API 端点、修改 _agent_loop
 index.html — 新增 Agent 管理页面、修改聊天消息渲染、新增产物预览
 新增文件:
-.partnerfm-agents.json         — Agent 注册表（首次启动自动生成）
-.partnerfm-project-agents.json — Project-Agent 映射表
+.seegent-agents.json         — Agent 注册表（首次启动自动生成）
+.seegent-project-agents.json — Project-Agent 映射表
 ```
 
 

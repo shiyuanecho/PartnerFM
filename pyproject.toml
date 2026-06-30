@@ -3,7 +3,7 @@ requires = ["setuptools>=58"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "partnerfm"
+name = "seegent"
 version = "0.1.0"
 description = "本地 AI 工作台 — 文件管理、模型配置、AI 对话"
 requires-python = ">=3.9"
@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 [project.scripts]
-partnerfm = "partnerfm.__main__:main"
+seegent = "seegent.__main__:main"
 
 [project.optional-dependencies]
 full = [
@@ -33,4 +33,4 @@ full = [
 ]
 
 [tool.setuptools.package-data]
-partnerfm = ["static/*"]
+seegent = ["static/*"]
