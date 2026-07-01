@@ -1780,6 +1780,10 @@ class Handler(SimpleHTTPRequestHandler):
         # 看板配置（按项目隔离）
         if self.path.startswith('/api/dashboard/config'):
             return self._handle_dashboard_config_get()
+        if self.path == '/api/board/projects':
+            return self._handle_board_projects_get()
+        if self.path.startswith('/api/board/bind/') and self.command == 'DELETE':
+            return self._handle_board_bind_delete()
         # Agent 文件变更红点通知
         if self.path == '/api/file-changes':
             from urllib.parse import urlparse, parse_qs
@@ -1989,6 +1993,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._handle_datasources_post()
         if self.path == '/api/datasources/bind':
             return self._handle_datasources_bind()
+        if self.path == '/api/board/bind':
+            return self._handle_board_bind_post()
         if self.path == '/api/feishu-credentials':
             return self._handle_feishu_credentials_post()
         self.send_error(404)
@@ -2830,6 +2836,193 @@ class Handler(SimpleHTTPRequestHandler):
             config['analyses'] = []
         self._save_dashboard_config(folder_id, config)
         self._serve_json({'ok': True, 'folderId': folder_id})
+
+    BOARD_BINDINGS_FILE = os.path.join(DATA_DIR, '.seegent-board-bindings.json')
+
+    # 待办标记：仅识别出现在行首的标记（避免误匹配代码示例）
+    TODO_PREFIX_PATTERNS = ('- [ ]', '- []', '* [ ]', '+ [ ]', 'todo:', 'todo：', '待办:', '待办：', 'fixme:', 'fixme：')
+    TODO_LINE_START_WORDS = ('todo', '待办', 'fixme')  # 整行以这些词开头（忽略 - * # 前缀）
+    # 排除的目录
+    SKIP_DIRS = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'dist', 'build', '.next', '.idea', '.vscode'}
+    # README 候选
+    README_CANDIDATES = ['README.md', 'README.txt', 'readme.md', 'readme.txt']
+
+    def _collect_md_files(self, root, max_files=200):
+        """收集根目录下的 Markdown 文件（递归，但跳过常见无关目录）"""
+        result = []
+        try:
+            for dirpath, dirnames, filenames in os.walk(root):
+                # 原地修改 dirnames 跳过无关目录
+                dirnames[:] = [d for d in dirnames if d not in self.SKIP_DIRS and not d.startswith('.')]
+                for fn in filenames:
+                    if fn.lower().endswith(('.md', '.markdown')):
+                        result.append(os.path.join(dirpath, fn))
+                        if len(result) >= max_files:
+                            return result
+        except Exception:
+            pass
+        return result
+
+    def _scan_todos_from_project(self, root):
+        """扫描项目内所有 Markdown 文件，提取待办行。
+        优先返回根目录 TODO.md / PLAN.md 等的完整内容；否则聚合各文件中的待办标记行。"""
+        todos = []
+
+        # 1. 先看根目录是否有专门待办文件，有就直接全文展示（最优先）
+        for candidate in ('TODO.md', 'PLAN.md', 'TASKS.md', 'todo.md', 'plan.md'):
+            fpath = os.path.join(root, candidate)
+            if os.path.isfile(fpath):
+                items = self._read_todo_lines(fpath, max_lines=50)
+                if items:
+                    return items, candidate
+
+        # 2. 否则扫描所有 md，提取带待办标记的行
+        md_files = self._collect_md_files(root)
+        for fpath in md_files:
+            try:
+                rel = os.path.relpath(fpath, root)
+                with open(fpath, 'r', encoding='utf-8', errors='ignore') as fh:
+                    for lineno, line in enumerate(fh, 1):
+                        clean = line.strip()
+                        if not clean or len(clean) < 3:
+                            continue
+                        if self._is_todo_line(clean):
+                            if len(clean) > 300:
+                                clean = clean[:300] + '...'
+                            todos.append({'text': clean, 'line': lineno, 'file': rel})
+                            if len(todos) >= 60:
+                                return todos, None
+            except Exception:
+                continue
+        return todos, None
+
+    def _is_todo_line(self, line):
+        """判断一行是否是待办标记行（严格匹配，避免误匹配代码示例）"""
+        low = line.lower()
+        # 1. 行首前缀模式：- [ ] / * [ ] / todo: / 待办: 等
+        for p in self.TODO_PREFIX_PATTERNS:
+            if low.startswith(p):
+                return True
+        # 2. 去掉常见的列表/标题前缀后，整行以 todo/待办/fixme 开头
+        stripped = low.lstrip('-*+#> ')
+        for w in self.TODO_LINE_START_WORDS:
+            if stripped.startswith(w):
+                return True
+        return False
+
+    def _read_todo_lines(self, filepath, max_lines=50):
+        """读取待办文件内容，返回行列表"""
+        items = []
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
+                for lineno, line in enumerate(fh, 1):
+                    if lineno > max_lines:
+                        break
+                    clean = line.strip()
+                    if not clean:
+                        continue
+                    if len(clean) > 300:
+                        clean = clean[:300] + '...'
+                    items.append({'text': clean, 'line': lineno})
+        except Exception:
+            pass
+        return items
+
+    def _scan_readme(self, root):
+        """读取 README 的前几段作为项目简介"""
+        for candidate in self.README_CANDIDATES:
+            fpath = os.path.join(root, candidate)
+            if os.path.isfile(fpath):
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='ignore') as fh:
+                        lines = []
+                        for line in fh:
+                            clean = line.strip()
+                            if clean.startswith('#'):
+                                # 跳过标题行本身，取标题后的内容
+                                continue
+                            if not clean:
+                                if lines:
+                                    break  # 遇到空行，说明第一段结束
+                                continue
+                            lines.append(clean)
+                            if len(lines) >= 5:
+                                break
+                        text = ' '.join(lines).strip()
+                        if len(text) > 300:
+                            text = text[:300] + '...'
+                        return text or None, candidate
+                except Exception:
+                    pass
+        return None, None
+
+    def _handle_board_projects_get(self):
+        """GET /api/board/projects — 读取所有绑定项目的信息+自动扫描待办"""
+        bindings = _load_json(self.BOARD_BINDINGS_FILE, {'bindings': {}})
+        projects = []
+        for folder_id, info in bindings.get('bindings', {}).items():
+            project = {
+                'folderId': folder_id,
+                'folderName': info.get('folderName', ''),
+                'path': info.get('path', ''),
+                'todoFile': None,
+                'readme': None,
+                'readmeFile': None,
+                'boundAt': info.get('boundAt', 0),
+                'todos': [],
+                'fileCount': 0,
+            }
+            abs_path = os.path.expanduser(info.get('path', ''))
+            if abs_path and os.path.isdir(abs_path):
+                # 统计子文件数量
+                try:
+                    project['fileCount'] = sum(
+                        1 for _ in os.listdir(abs_path)
+                        if not _.startswith('.') and not _.startswith('~')
+                    )
+                except Exception:
+                    pass
+                # 自动扫描待办
+                todos, todo_source = self._scan_todos_from_project(abs_path)
+                project['todos'] = todos
+                project['todoFile'] = todo_source
+                # 自动读取项目简介
+                readme_text, readme_file = self._scan_readme(abs_path)
+                project['readme'] = readme_text
+                project['readmeFile'] = readme_file
+            projects.append(project)
+        self._serve_json({'projects': projects})
+
+    def _handle_board_bind_post(self):
+        """POST /api/board/bind — 绑定文件夹到看板（自动扫描待办文件）"""
+        body = self._read_body()
+        if not body:
+            return
+        folder_id = body.get('folderId', '').strip()
+        if not folder_id:
+            self._serve_json({'error': 'folderId 不能为空'}, 400)
+            return
+        bindings = _load_json(self.BOARD_BINDINGS_FILE, {'bindings': {}})
+        bindings.setdefault('bindings', {})[folder_id] = {
+            'folderName': body.get('folderName', ''),
+            'path': body.get('path', ''),
+            'boundAt': int(time.time() * 1000),
+        }
+        _save_json(self.BOARD_BINDINGS_FILE, bindings)
+        self._serve_json({'ok': True, 'folderId': folder_id})
+
+    def _handle_board_bind_delete(self):
+        """DELETE /api/board/bind/:folderId — 解绑"""
+        parts = self.path.rstrip('/').split('/')
+        folder_id = parts[-1] if len(parts) >= 4 and parts[-1] not in ('api', 'board', 'bind') else None
+        if not folder_id:
+            self._serve_json({'error': 'Missing folderId'}, 400)
+            return
+        bindings = _load_json(self.BOARD_BINDINGS_FILE, {'bindings': {}})
+        if folder_id in bindings.get('bindings', {}):
+            del bindings['bindings'][folder_id]
+            _save_json(self.BOARD_BINDINGS_FILE, bindings)
+        self._serve_json({'ok': True})
 
     # ===== 数据源注册表 CRUD =====
 
@@ -4657,7 +4850,7 @@ class Handler(SimpleHTTPRequestHandler):
         _append_log({
             'type': 'agent_start',
             'agentId': 'main',
-            'agentName': '主 Agent',
+            'agentName': '小See',
             'modelId': model,
             'workspace': wpath or '',
             'userMsg': next((m.get('content', '') for m in messages if m['role'] == 'user'), '')[:200],
@@ -4666,7 +4859,7 @@ class Handler(SimpleHTTPRequestHandler):
         iteration = 0
         system_msg = next((m for m in messages if m['role'] == 'system'), None)
         if not system_msg:
-            base_prompt = '你是用户的 AI 助手。回复要求：简洁、直接、无废话、无 emoji。用 Markdown 标题和列表组织信息，代码放代码块。'
+            base_prompt = '你叫"小See"，是用户的 AI 工作台助手。打招呼时自我介绍叫小See。重要规则：(1)每次回复必须以文字收尾——用了工具也要用一两句话总结结果。(2)文件/目录不存在时如实告知。(3)用户问电脑上任意文件夹时，用 run_shell 执行 ls/find/cat 等命令探索，不要局限于工作区。(4)简单问题直接回复，不调工具。(5)绝对不使用任何 emoji 表情符号。中文回复。'
             if wpath:
                 base_prompt += f' 工作区：{wpath}。文件操作优先用 edit_file 而非 write_file。可用工具：文件读写搜索、shell、web 搜索抓取、调用子 Agent。中文回复。'
             else:
@@ -4770,7 +4963,7 @@ class Handler(SimpleHTTPRequestHandler):
 
                 # 记录 token 用量
                 if usage:
-                    _record_usage(model, 'main', '主 Agent',
+                    _record_usage(model, 'main', '小See',
                                   usage.get('prompt_tokens', 0),
                                   usage.get('completion_tokens', 0))
 
@@ -4825,7 +5018,7 @@ class Handler(SimpleHTTPRequestHandler):
                 _append_log({
                     'type': 'agent_end',
                     'agentId': 'main',
-                    'agentName': '主 Agent',
+                    'agentName': '小See',
                     'modelId': model,
                     'iterations': iteration,
                     'toolsUsed': log_tools_used,
@@ -4845,7 +5038,7 @@ class Handler(SimpleHTTPRequestHandler):
             _append_log({
                 'type': 'agent_end',
                 'agentId': 'main',
-                'agentName': '主 Agent',
+                'agentName': '小See',
                 'modelId': model,
                 'iterations': iteration,
                 'toolsUsed': log_tools_used,
@@ -4859,7 +5052,7 @@ class Handler(SimpleHTTPRequestHandler):
             _append_log({
                 'type': 'agent_end',
                 'agentId': 'main',
-                'agentName': '主 Agent',
+                'agentName': '小See',
                 'modelId': model,
                 'duration': round(time.time() - log_start, 1),
                 'status': 'error',
@@ -4870,7 +5063,7 @@ class Handler(SimpleHTTPRequestHandler):
             _append_log({
                 'type': 'agent_end',
                 'agentId': 'main',
-                'agentName': '主 Agent',
+                'agentName': '小See',
                 'modelId': model,
                 'duration': round(time.time() - log_start, 1),
                 'status': 'error',

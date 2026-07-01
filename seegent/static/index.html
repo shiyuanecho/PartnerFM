@@ -1125,7 +1125,7 @@ body {
 #context-menu {
   display: none;
   position: fixed;
-  background: rgba(255,255,255,0.98);
+  background: var(--bg-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
@@ -2039,6 +2039,25 @@ body {
 .dash-empty { padding:60px 20px; text-align:center; color:var(--text-secondary); border:2px dashed var(--border); border-radius:12px; }
 .dash-empty .de-icon { font-size:40px; margin-bottom:10px; }
 .dash-empty-icon { margin-bottom:16px; color:var(--text-tertiary); display:inline-flex; align-items:center; justify-content:center; }
+/* 项目信息卡片 */
+.dash-project-card { border:1px solid var(--border); border-radius:12px; background:var(--bg-card); margin-bottom:14px; overflow:hidden; transition:all var(--transition-normal); }
+.dash-project-card:hover { box-shadow:var(--shadow); border-color:var(--accent); }
+.dash-project-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; gap:10px; }
+.dash-project-name { font-size:15px; font-weight:700; color:var(--text); flex:1; display:flex; align-items:center; gap:8px; }
+.dash-project-path { font-size:11px; color:var(--text-tertiary); font-weight:400; padding:2px 8px; background:var(--bg-hover); border-radius:4px; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.dash-project-actions { display:flex; gap:4px; flex-shrink:0; }
+.dash-project-body { padding:0 16px 14px; }
+.dash-project-meta { display:flex; gap:16px; font-size:11px; color:var(--text-tertiary); margin-bottom:10px; }
+.dash-project-meta-item { display:flex; align-items:center; gap:4px; }
+.dash-project-todos-title { font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+.dash-project-todos { list-style:none; margin:0; padding:0; max-height:280px; overflow-y:auto; }
+.dash-project-todo-item { padding:6px 10px; border-bottom:1px solid var(--border); font-size:13px; color:var(--text-secondary); display:flex; align-items:flex-start; gap:8px; line-height:1.5; }
+.dash-project-todo-item:last-child { border-bottom:none; }
+.dash-project-idx { flex-shrink:0; color:var(--text-tertiary); font-size:11px; min-width:20px; text-align:right; }
+.dash-project-text { flex:1; }
+.dash-project-todo-src { flex-shrink:0; font-size:10px; color:var(--text-tertiary); padding:1px 6px; border-radius:4px; background:var(--bg-hover); white-space:nowrap; max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+.dash-project-empty { padding:32px 20px; text-align:center; color:var(--text-tertiary); font-size:13px; border:2px dashed var(--border); border-radius:12px; margin-bottom:20px; }
+.dash-project-empty-hint { font-size:11px; color:var(--text-tertiary); margin-top:6px; }
 .dash-section-title { font-size:13px; font-weight:600; color:var(--text-secondary); margin:8px 0 12px; display:flex; align-items:center; gap:6px; }
 .dash-source-card { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--bg-card); margin-bottom:8px; }
 .dash-source-info { display:flex; align-items:center; gap:10px; }
@@ -2308,25 +2327,26 @@ body {
 .chat-ctx-tag .ctx-remove:hover { opacity:1; color:var(--color-danger); }
 #chat-hide-btn { flex: 0 0 auto; width: 28px; height: 28px; padding: 0; font-size: 14px; border: 1px solid var(--border); background: var(--bg-card); border-radius: 6px; cursor: pointer; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast); font-family: var(--font); }
 #chat-hide-btn:hover { background: var(--bg-hover); color: var(--text); }
-.chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 20px; display: flex; flex-direction: column; gap: 16px; }
+.chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 20px; display: flex; flex-direction: column; gap: 24px; }
 .chat-messages::-webkit-scrollbar { width: 4px; }
 .chat-messages::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
-.chat-msg { max-width: 88%; padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.6; word-wrap: break-word; overflow-wrap: anywhere; border: none; overflow: hidden; transition: opacity var(--transition-fast); flex-shrink: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif; letter-spacing: -0.01em; }
+.chat-msg { max-width: 88%; padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.6; word-wrap: break-word; overflow-wrap: anywhere; border: none; overflow: visible; transition: opacity var(--transition-fast); flex-shrink: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif; letter-spacing: -0.01em; }
 .chat-msg.plain { white-space: pre-wrap; }
 .chat-msg.user { align-self: flex-end; background: rgba(128,128,128,0.06); color: var(--text); border-bottom-right-radius: 4px; max-width: 75%; backdrop-filter: blur(24px) saturate(200%); -webkit-backdrop-filter: blur(24px) saturate(200%); border: 1px solid rgba(128,128,128,0.08); box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-.chat-msg.assistant { align-self: flex-start; background: transparent; color: var(--text); border-radius: 0; padding: 12px 0; max-width: 100%; }
+.chat-msg.assistant { align-self: flex-start; background: transparent; color: var(--text); border-radius: 0; padding: 12px 0 12px 0; max-width: 100%; }
+.chat-msg.assistant + .chat-msg.assistant { margin-top: -4px; }
 .chat-msg.error { align-self: flex-start; background: var(--color-danger-bg); color: var(--color-danger-text); }
 /* Apple-style Markdown typography */
-.chat-msg.assistant h1 { font-size: 20px; font-weight: 600; margin: 24px 0 8px 0; letter-spacing: -0.02em; }
-.chat-msg.assistant h2 { font-size: 17px; font-weight: 600; margin: 20px 0 6px 0; letter-spacing: -0.02em; }
-.chat-msg.assistant h3 { font-size: 15px; font-weight: 600; margin: 16px 0 4px 0; }
-.chat-msg.assistant h4 { font-size: 14px; font-weight: 600; margin: 12px 0 4px 0; }
+.chat-msg.assistant h1 { font-size: 20px; font-weight: 600; margin: 24px 0 8px 0; letter-spacing: -0.02em; line-height: 1.25; }
+.chat-msg.assistant h2 { font-size: 17px; font-weight: 600; margin: 20px 0 6px 0; letter-spacing: -0.02em; line-height: 1.3; }
+.chat-msg.assistant h3 { font-size: 15px; font-weight: 600; margin: 16px 0 4px 0; line-height: 1.35; }
+.chat-msg.assistant h4 { font-size: 14px; font-weight: 600; margin: 12px 0 4px 0; line-height: 1.4; }
 .chat-msg.assistant p { margin: 0 0 10px 0; }
 .chat-msg.assistant p:last-child { margin-bottom: 0; }
 .chat-msg.assistant strong { font-weight: 600; }
 .chat-msg.assistant pre { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
 .chat-msg.assistant pre code { font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace; background: none; padding: 0; font-size: 13px; }
-.chat-msg.assistant code { background: var(--bg-hover); padding: 2px 5px; border-radius: 4px; font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 13px; }
+.chat-msg.assistant code { background: var(--bg-hover); padding: 2px 5px; border-radius: 4px; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace; font-size: 13px; }
 .chat-msg.assistant table { border-collapse: collapse; margin: 12px 0; font-size: 13px; width: 100%; }
 .chat-msg.assistant th, .chat-msg.assistant td { border-bottom: 1px solid var(--border); padding: 8px 12px; text-align: left; }
 .chat-msg.assistant th { font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: none; }
@@ -2872,8 +2892,10 @@ body {
         <div class="mgmt-panel">
           <div class="page-header">
 	            <h2>看板</h2>
-	            <p>以数据源为中心。添加飞书多维表格 → 自动提取指标 → 绑定到项目。项目为目标指标服务。</p>
+	            <p>项目信息 + 业务数据。右键文件夹 → 绑定到看板。</p>
           </div>
+          <div id="dash-projects"></div>
+	          <div class="dash-section-title"><svg width="16" height="16"><use href="#icon-data"/></svg> 业务数据</div>
 	          <div class="dash-toolbar">
 	            <button class="dash-add-btn" onclick="openAddDatasourceModal()"><span class="app-icon app-icon--sm"><svg width="16" height="16"><use href="#icon-plus"/></svg></span> 添加数据源</button>
 	            <button onclick="loadDashboard()" title="刷新所有数据" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-tertiary);border-radius:6px" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background='none'"><span class="app-icon app-icon--sm"><svg width="18" height="18"><use href="#icon-refresh"/></svg></span></button>
@@ -3342,7 +3364,7 @@ body {
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
 <!-- 截图功能：把展示区内容渲染成图片，用于自媒体发布等场景
@@ -4899,6 +4921,7 @@ function showContextMenu(x, y, node, parentFolder) {
       parentFolder.path = null; // 清空以触发重新绑定
       bindFolderPath(parentFolder);
     }});
+    items.push({ label: '绑定到看板', cls: '', action: () => bindFolderToBoard(parentFolder) });
     items.push({ sep: true });
   }
   items.push({ label: '复制', cls: '', action: () => copyEntry(node.handle, node.name, node.kind) });
@@ -8812,8 +8835,24 @@ function renderTokenHistory() {
 
   if (isTool) {
     itemList = (tok.tools || []).slice().sort((a, b) => (b.total||0) - (a.total||0));
-    topItems = itemList.slice(0, maxItems);
-    otherIds = new Set(itemList.slice(maxItems).map(t => t.id));
+    // 始终把 OpenCode 归入"其他"，始终让 Seegent 出现在独立列
+    const alwaysOther = new Set(['opencode']);
+    let topItemsRaw = [];
+    let otherItems = [];
+    itemList.forEach(t => {
+      if (alwaysOther.has(t.id)) { otherItems.push(t); }
+      else { topItemsRaw.push(t); }
+    });
+    // seegent 排在最后（其他之前），始终占一列
+    const seegentItem = topItemsRaw.find(t => t.id === 'seegent');
+    const nonSeegent = topItemsRaw.filter(t => t.id !== 'seegent');
+    topItems = nonSeegent.slice(0, seegentItem ? 6 : 7);
+    if (seegentItem) topItems.push(seegentItem);
+    const shownIds = new Set(topItems.map(t => t.id));
+    otherIds = new Set([
+      ...topItemsRaw.filter(t => !shownIds.has(t.id)).map(t => t.id),
+      ...otherItems.map(t => t.id)
+    ]);
     hasOther = otherIds.size > 0;
     itemByDate = {};
     topItems.forEach(t => { itemByDate[t.id] = t.byDate || {}; });
@@ -8967,10 +9006,112 @@ let dashboardFoldersCache = [];   // 文件夹列表缓存（从 state.folders�
 let datasourcesRegistry = {};     // 全局数据源注册表缓存
 
 // ---- 看板初始化 ----
+// ---- 项目信息 ----
+let boardProjectsData = null;
+
+async function loadBoardProjects() {
+  try {
+    const r = await fetch('/api/board/projects');
+    boardProjectsData = await r.json();
+  } catch(e) {
+    boardProjectsData = null;
+  }
+  renderBoardProjects();
+}
+
+function renderBoardProjects() {
+  const el = document.getElementById('dash-projects');
+  if (!el) return;
+  const projects = (boardProjectsData && boardProjectsData.projects) || [];
+
+  if (!projects.length) {
+    el.innerHTML = '<div class="dash-project-empty"><div class="dash-empty-icon"><svg width="36" height="36"><use href="#icon-folder"/></svg></div>暂无绑定项目<br><span class="dash-project-empty-hint">在左侧文件模块中，右键文件夹 → "绑定到看板"</span></div>';
+    return;
+  }
+
+  let html = '';
+  for (const p of projects) {
+    const todoCount = (p.todos || []).length;
+    html += '<div class="dash-project-card">';
+    html += '<div class="dash-project-header">';
+    html += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">';
+    html += '<span class="dash-project-name"><svg width="18" height="18" style="flex-shrink:0"><use href="#icon-folder"/></svg> ' + escapeHtml(p.folderName) + '</span>';
+    if (p.path) html += '<span class="dash-project-path" title="' + escapeHtml(p.path) + '">' + escapeHtml(p.path) + '</span>';
+    html += '</div>';
+    html += '<div class="dash-project-actions">';
+    html += '<button onclick="unbindFromBoard(\'' + escapeHtml(p.folderId) + '\')" title="解绑" style="width:28px;height:28px;border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:16px" onmouseenter="this.style.background=\'var(--bg-hover)\'" onmouseleave="this.style.background=\'none\'">×</button>';
+    html += '</div></div>';
+    // meta
+    html += '<div class="dash-project-body">';
+    // 项目简介
+    if (p.readme) {
+      html += '<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;padding:10px 12px;background:var(--bg-surface);border-radius:8px">' + escapeHtml(p.readme) + '</div>';
+    }
+    html += '<div class="dash-project-meta">';
+    html += '<span class="dash-project-meta-item">' + p.fileCount + ' 个文件</span>';
+    if (p.todoFile) {
+      html += '<span class="dash-project-meta-item">来源: ' + escapeHtml(p.todoFile) + '</span>';
+    }
+    html += '</div>';
+    // 待办列表
+    if (p.todos && p.todos.length) {
+      html += '<div class="dash-project-todos-title"><svg width="14" height="14"><use href="#icon-check"/></svg> 待办 (' + todoCount + ')</div>';
+      html += '<ul class="dash-project-todos">';
+      p.todos.forEach((item, i) => {
+        html += '<li class="dash-project-todo-item">';
+        html += '<span class="dash-project-idx">' + (i + 1) + '.</span>';
+        html += '<span class="dash-project-text">' + escapeHtml(item.text) + '</span>';
+        if (item.file) {
+          html += '<span class="dash-project-todo-src" title="' + escapeHtml(item.file) + ':' + item.line + '">' + escapeHtml(item.file) + '</span>';
+        }
+        html += '</li>';
+      });
+      html += '</ul>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--text-tertiary);padding:8px 0">未发现待办项（需含 TODO / 待办 / - [ ] 等标记）</div>';
+    }
+    html += '</div></div>';
+  }
+  el.innerHTML = html;
+}
+
+async function bindFolderToBoard(folder) {
+  if (!folder) return;
+  try {
+    const resp = await fetch('/api/board/bind', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folderId: folder.id,
+        folderName: folder.name,
+        path: folder.path || ''
+      })
+    });
+    if (resp.ok) {
+      await loadBoardProjects();
+    } else {
+      alert('绑定失败');
+    }
+  } catch(e) {
+    alert('绑定失败：' + e.message);
+  }
+}
+
+async function unbindFromBoard(folderId) {
+  if (!confirm('确定解绑该项目？')) return;
+  try {
+    await fetch('/api/board/bind/' + encodeURIComponent(folderId), { method: 'DELETE' });
+    await loadBoardProjects();
+  } catch(e) {
+    alert('解绑失败');
+  }
+}
+
 async function initDashboard() {
   refreshDashboardFolders();
   populateDashboardFolderSelect();
   await loadDatasourcesRegistry();
+  await loadBoardProjects();
   loadDashboard();
 }
 
@@ -10853,7 +10994,7 @@ async function sendChat() {
     // 稳定前缀（始终相同 → DeepSeek 缓存命中，省 token 省时间）
     const agentPrompt = getActiveAgentPrompt();
     const skillsPrompt = getActiveSkillsPrompt();
-    let stablePrompt = agentPrompt || '你是一个智能助手，是用户的主 Agent。你可以调用其他专业助手来协作完成任务。请用中文回复。';
+    let stablePrompt = agentPrompt || '你叫"小See"，是用户的 AI 工作台助手。打招呼时自我介绍叫小See。重要规则：(1)每次回复必须以文字收尾——即使用了工具，也要用一两句话总结结果。(2)文件/目录不存在时如实告知。(3)用户问电脑上任意文件夹的内容时，优先用 run_shell 执行 ls/find/cat 等命令来探索，不要局限于工作区路径。(4)简单问题直接回复，不调工具。(5)绝对不使用任何 emoji 表情符号。中文回复。';
     if (skillsPrompt) {
       stablePrompt = (stablePrompt ? stablePrompt + '\n' : '') + skillsPrompt;
     }
@@ -10967,6 +11108,10 @@ async function sendChat() {
       } else {
         await handleChatStream(resp, session, abortSignal);
       }
+    }
+    // 清理残留的"思考中..."占位（Agent 只有工具调用、没有文本回复时会留下）
+    if (thinkingEl && thinkingEl.parentNode && thinkingEl.innerHTML.includes('思考中...')) {
+      thinkingEl.remove();
     }
   } catch(e) {
     // 打断不算错误，静默处理
@@ -11432,9 +11577,14 @@ async function handleAgentStream(resp, session, abortSignal) {
     }
   }
 
-  if (!finalContent && !msgEl) {
-    finalContent = '(空返回)';
-    addChatMessage('assistant', finalContent, false);
+  if (!finalContent) {
+    // 清理残留的"思考中..."占位
+    if (msgEl && msgEl.innerHTML.includes('思考中...')) {
+      msgEl.remove();
+    } else if (!msgEl) {
+      finalContent = '(空返回)';
+      addChatMessage('assistant', finalContent, false);
+    }
   }
   if (finalContent) {
     session.messages.push({ role: 'assistant', content: finalContent });
@@ -11513,6 +11663,7 @@ function renderChatMessages() {
     return;
   }
   for (const m of s.messages) {
+    if (!m.content || (typeof m.content === 'string' && !m.content.trim())) continue;
     const el = document.createElement('div');
     el.className = 'chat-msg ' + m.role;
     if (m.role === 'user') el.classList.add('plain');
