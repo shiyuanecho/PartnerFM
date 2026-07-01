@@ -2894,7 +2894,11 @@ body {
 	            <h2>看板</h2>
 	            <p>项目信息 + 业务数据。右键文件夹 → 绑定到看板。</p>
           </div>
-          <div id="dash-projects"></div>
+		  <div class="dash-section-title" style="margin-top:0">
+		    <svg width="16" height="16"><use href="#icon-folder"/></svg> 项目信息
+		    <button onclick="refreshBoardProjects()" title="刷新项目信息" style="margin-left:auto;background:none;border:none;cursor:pointer;padding:4px;color:var(--text-tertiary);border-radius:6px" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background='none'"><span class="app-icon app-icon--sm"><svg width="16" height="16"><use href="#icon-refresh"/></svg></span></button>
+		  </div>
+		  <div id="dash-projects"></div>
 	          <div class="dash-section-title"><svg width="16" height="16"><use href="#icon-data"/></svg> 业务数据</div>
 	          <div class="dash-toolbar">
 	            <button class="dash-add-btn" onclick="openAddDatasourceModal()"><span class="app-icon app-icon--sm"><svg width="16" height="16"><use href="#icon-plus"/></svg></span> 添加数据源</button>
@@ -9019,6 +9023,15 @@ async function loadBoardProjects() {
   renderBoardProjects();
 }
 
+async function refreshBoardProjects() {
+  const el = document.getElementById('dash-projects');
+  if (el) el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-tertiary);font-size:13px">正在扫描项目信息...</div>';
+  await loadBoardProjects();
+  // 同时刷新数据源注册表（确保绑定关系同步）
+  await loadDatasourcesRegistry();
+  loadDashboard();
+}
+
 function renderBoardProjects() {
   const el = document.getElementById('dash-projects');
   if (!el) return;
@@ -9029,9 +9042,13 @@ function renderBoardProjects() {
     return;
   }
 
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+
   let html = '';
   for (const p of projects) {
     const todoCount = (p.todos || []).length;
+    const hasTodos = todoCount > 0;
     html += '<div class="dash-project-card">';
     html += '<div class="dash-project-header">';
     html += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">';
@@ -9041,21 +9058,34 @@ function renderBoardProjects() {
     html += '<div class="dash-project-actions">';
     html += '<button onclick="unbindFromBoard(\'' + escapeHtml(p.folderId) + '\')" title="解绑" style="width:28px;height:28px;border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:16px" onmouseenter="this.style.background=\'var(--bg-hover)\'" onmouseleave="this.style.background=\'none\'">×</button>';
     html += '</div></div>';
-    // meta
+
     html += '<div class="dash-project-body">';
-    // 项目简介
-    if (p.readme) {
-      html += '<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;padding:10px 12px;background:var(--bg-surface);border-radius:8px">' + escapeHtml(p.readme) + '</div>';
-    }
+    // 元信息行：文件数 + 待办数 + 状态标签 + 刷新时间
     html += '<div class="dash-project-meta">';
-    html += '<span class="dash-project-meta-item">' + p.fileCount + ' 个文件</span>';
+    html += '<span class="dash-project-meta-item"><svg width="12" height="12"><use href="#icon-file"/></svg> ' + p.fileCount + ' 个文件</span>';
+    html += '<span class="dash-project-meta-item"><svg width="12" height="12"><use href="#icon-check"/></svg> ' + todoCount + ' 个待办</span>';
+    if (p.readmeFile) {
+      html += '<span class="dash-project-meta-item"><svg width="12" height="12"><use href="#icon-memo"/></svg> ' + escapeHtml(p.readmeFile) + '</span>';
+    }
     if (p.todoFile) {
-      html += '<span class="dash-project-meta-item">来源: ' + escapeHtml(p.todoFile) + '</span>';
+      html += '<span class="dash-project-meta-item"><svg width="12" height="12"><use href="#icon-memo"/></svg> ' + escapeHtml(p.todoFile) + '</span>';
+    }
+    html += '<span class="dash-project-meta-item" style="margin-left:auto;color:var(--text-tertiary)">更新于 ' + timeStr + '</span>';
+    html += '</div>';
+
+    // README 简介
+    if (p.readme) {
+      html += '<div class="ds-card-section-label"><svg width="13" height="13"><use href="#icon-memo"/></svg> 项目简介</div>';
+      html += '<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px;padding:10px 12px;background:var(--bg-surface);border-radius:8px">' + escapeHtml(p.readme) + '</div>';
+    }
+
+    // 待办列表
+    html += '<div class="ds-card-section-label"><svg width="13" height="13"><use href="#icon-check"/></svg> 待办事项';
+    if (hasTodos) {
+      html += ' <span style="font-weight:400;color:var(--text-tertiary)">(' + todoCount + ')</span>';
     }
     html += '</div>';
-    // 待办列表
-    if (p.todos && p.todos.length) {
-      html += '<div class="dash-project-todos-title"><svg width="14" height="14"><use href="#icon-check"/></svg> 待办 (' + todoCount + ')</div>';
+    if (hasTodos) {
       html += '<ul class="dash-project-todos">';
       p.todos.forEach((item, i) => {
         html += '<li class="dash-project-todo-item">';
