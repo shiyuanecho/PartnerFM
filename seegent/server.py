@@ -3065,7 +3065,7 @@ class Handler(SimpleHTTPRequestHandler):
             'lastSyncAt': body.get('lastSyncAt') or existing.get('lastSyncAt'),
         }
         # 飞书数据源特有字段
-        for key in ('appToken', 'tableId', 'credentialId', 'sourceUrl', 'columnMapping', 'icon'):
+        for key in ('appToken', 'tableId', 'credentialId', 'sourceUrl', 'columnMapping', 'icon', 'displayFields', 'dateField'):
             val = body.get(key)
             if val is not None:
                 src[key] = val
@@ -3220,14 +3220,25 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _feishu_get_table_name(self, app_token, table_id, token):
         """获取多维表格名称
-        GET /open-apis/bitable/v1/apps/{app_token}/tables/{table_id}
+        先试单表接口，失败则用列表接口匹配
         """
         url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}'
         result, err = self._feishu_request(url, token=token)
-        if err:
-            return None, err
-        name = (result or {}).get('data', {}).get('table', {}).get('name', '')
-        return name if name else None, None
+        if result:
+            name = (result or {}).get('data', {}).get('table', {}).get('name', '')
+            if name:
+                return name, None
+        # 单表接口不可用时，用列表接口匹配
+        list_url = f'https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables'
+        list_result, list_err = self._feishu_request(list_url, token=token)
+        if list_err:
+            return None, err or list_err
+        items = (list_result or {}).get('data', {}).get('items', [])
+        for t in items:
+            if t.get('table_id') == table_id:
+                name = t.get('name', '')
+                return name if name else None, None
+        return None, None
 
     def _feishu_get_app_name(self, app_token, token):
         """获取多维表格应用名称
@@ -3581,7 +3592,9 @@ class Handler(SimpleHTTPRequestHandler):
 
         # 4. 写入数据源注册表（不再是项目配置）
         source_id = body.get('sourceId') or ('feishu_' + str(int(time.time() * 1000)))
-        source_name = body.get('name') or '飞书表格'
+        # 优先用飞书实际表名，再回落前端传的旧名
+        feishu_table_name, _ = self._feishu_get_table_name(app_token, table_id, token)
+        source_name = feishu_table_name or body.get('name') or '飞书表格'
         bound_folders = body.get('boundFolders', [])
 
         registry = self._load_datasources()

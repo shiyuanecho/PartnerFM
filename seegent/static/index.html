@@ -89,8 +89,8 @@
   --text: #e4e4e8;
   --text-secondary: #a8a8ae;
   --text-tertiary: #6e6e74;
-  --accent: #c8c8cc;
-  --accent-hover: #e4e4e8;
+  --accent: #55555a;
+  --accent-hover: #6e6e73;
   --accent-light: rgba(255,255,255,0.08);
   --glass-bg: rgba(120,120,128,0.14);
   --glass-border: rgba(120,120,128,0.10);
@@ -2090,6 +2090,19 @@ body {
 .field-cb input[type=checkbox] { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; }
 .field-cb em { font-style:normal; font-size:11px; color:var(--text-tertiary); margin-left:4px; }
 
+/* ===== 配置提示框 ===== */
+.config-hint { margin:0 0 18px; padding:14px 16px; border:1px solid var(--border); border-radius:10px; background:var(--bg-surface); font-size:12.5px; color:var(--text-secondary); line-height:1.7; }
+.config-hint summary { cursor:pointer; font-weight:600; font-size:13px; color:var(--text); display:flex; align-items:center; gap:6px; user-select:none; }
+.config-hint summary::-webkit-details-marker { display:none; }
+.config-hint summary .ch-arrow { transition:transform .15s; font-size:10px; color:var(--text-tertiary); }
+.config-hint[open] summary .ch-arrow { transform:rotate(90deg); }
+.config-hint .ch-body { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+.config-hint .ch-method { font-weight:600; color:var(--text); margin:10px 0 4px; }
+.config-hint .ch-method:first-child { margin-top:0; }
+.config-hint .ch-path { display:inline-block; padding:2px 8px; font-family:var(--font-mono); font-size:11px; background:var(--bg-card); border:1px solid var(--border); border-radius:4px; color:var(--accent); margin:2px 0; }
+.config-hint .ch-pre { margin:6px 0; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; font-family:var(--font-mono); font-size:11px; line-height:1.6; overflow-x:auto; white-space:pre; color:var(--text-secondary); }
+.config-hint .ch-note { font-size:11px; color:var(--text-tertiary); margin-top:8px; padding:6px 10px; background:var(--color-warning-bg, #fffbeb); border-radius:6px; border:1px solid var(--color-warning-border, #fde68a); }
+
 /* ===== 本机 AI 监控（tokenrank 风格）===== */
 .ai-tool-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:24px; }
 .ai-tool-card { padding:14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-card); display:flex; flex-direction:column; gap:8px; transition:all var(--transition-normal); }
@@ -2185,7 +2198,8 @@ body {
 .pm-field input:focus { border-color:var(--accent); }
 .pm-field textarea { font-family:var(--font-mono); outline:none; }
 .pm-field textarea:focus { border-color:var(--accent); }
-.pm-footer button.btn-primary:hover { opacity:0.9; }
+.btn-primary { padding:8px 20px !important; font-size:13px !important; border-radius:8px !important; border:none !important; background:var(--accent) !important; color:#fff !important; cursor:pointer !important; font-family:var(--font) !important; font-weight:600 !important; transition:all .1s !important; }
+.btn-primary:hover { background:var(--accent-hover) !important; }
 .pm-footer button.btn-cancel:hover { background:var(--bg-hover); }
 
 .model-form { max-width: 520px; }
@@ -2932,45 +2946,31 @@ body {
             <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">配置大模型 API Key，在右侧聊天窗口中选择使用。添加后即可在模型选择器中切换。</p>
             <button class="config-add-btn" onclick="openAddProviderModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
           </div>
+
+          <details class="config-hint">
+            <summary><svg width="14" height="14"><use href="#icon-info"/></svg> 两种配置方式 <span class="ch-arrow">▶</span></summary>
+            <div class="ch-body">
+              <div class="ch-method">方式一：在本页面配置</div>
+              点击上方 ＋ 按钮，填写 Provider 名称、API Key、Base URL，勾选要启用的模型后保存。
+              <div class="ch-method">方式二：直接编辑配置文件</div>
+              用任意文本编辑器打开配置文件，按相同格式手动修改：
+              <div class="ch-path">Seegent/.seegent-models.json</div>
+              <div class="ch-pre">{
+  "providers": {
+    "deepseek": {
+      "key": "sk-xxxxxxxx",           <span style="color:var(--text-tertiary)">← API Key</span>
+      "url": "https://api.deepseek.com/v1",
+      "models": ["deepseek-v4-flash"]
+    }
+  },
+  "default": "deepseek/deepseek-v4-flash"
+}</div>
+              <div class="ch-note"><svg width="12" height="12"><use href="#icon-info"/></svg> 此文件已在 <code>.gitignore</code> 中，不会被 git 提交。API Key 仅存本地，不经过任何中转服务器。</div>
+            </div>
+          </details>
+
           <div id="model-list"></div>
 
-          <div class="page-header" style="margin-top:var(--space-8)">
-            <h2>向量检索配置</h2>
-            <p>配置 embedding 服务后，AI 可对你的文件做<strong>语义搜索</strong>（按意思找，不只按关键词）。<span style="color:var(--text-tertiary)">文件内容会发送到该服务计算向量。</span></p>
-          </div>
-          <div id="embedding-config-box" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px">
-            <div style="display:grid;grid-template-columns:90px 1fr;gap:10px 12px;align-items:center;font-size:13px">
-              <label style="color:var(--text-tertiary);font-size:13px">服务商</label>
-              <select id="emb-provider" onchange="onEmbProviderChange()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%">
-                <option value="">请选择</option>
-                <optgroup label="国际">
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                </optgroup>
-                <optgroup label="国内">
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="minimax">MiniMax</option>
-                  <option value="zhipu">智谱 GLM</option>
-                  <option value="kimi">Kimi（月之暗面）</option>
-                </optgroup>
-                <optgroup label="其他">
-                  <option value="custom">自定义（OpenAI 兼容）</option>
-                </optgroup>
-              </select>
-              <label style="color:var(--text-tertiary);font-size:13px">API Key</label>
-              <input id="emb-key" type="password" placeholder="sk-..." style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
-              <label style="color:var(--text-tertiary);font-size:13px">Base URL</label>
-              <input id="emb-url" placeholder="https://api.openai.com/v1" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
-              <label style="color:var(--text-tertiary);font-size:13px">模型名</label>
-              <input id="emb-model" placeholder="text-embedding-3-small" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-mono);background:var(--bg-card);color:var(--text);outline:none;width:100%;box-sizing:border-box">
-            </div>
-            <div id="emb-note" style="display:none;margin-top:8px;font-size:11px;color:var(--color-warning-text, #b45309);background:var(--color-warning-bg, #fffbeb);padding:6px 10px;border-radius:6px;border:1px solid var(--color-warning-border, #fde68a)"></div>
-            <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
-              <button id="emb-save-btn" onclick="saveEmbeddingConfig()" style="padding:6px 14px;margin-bottom:0;font-size:13px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);border-radius:6px;cursor:pointer;font-family:var(--font);transition:all var(--transition-fast);display:inline-flex;align-items:center;gap:4px"><span class="app-icon app-icon--sm"><svg><use href="#icon-save"/></svg></span>保存</button>
-              <button onclick="testEmbedding()" id="emb-test-btn" style="padding:6px 14px;font-size:13px;border:1px solid var(--border);background:var(--bg-card);border-radius:6px;cursor:pointer;font-family:var(--font);color:var(--text);transition:all var(--transition-fast)"><span class="app-icon app-icon--sm" style="margin-right:3px"><svg><use href="#icon-test"/></svg></span>测试连接</button>
-              <span id="emb-status" style="font-size:12px;color:var(--text-tertiary)"></span>
-            </div>
-          </div>
       </div>
 
       <!-- 扩展模块 -->
@@ -2979,6 +2979,40 @@ body {
             <p style="font-size:var(--text-sm);color:var(--text-secondary);margin:0">打开开关后，AI 可在对话中调用对应工具。</p>
             <button class="config-add-btn" onclick="openMcpModal()" style="margin:0;flex-shrink:0;background:var(--bg-card);color:var(--text-secondary);border-color:var(--border)">＋</button>
           </div>
+
+          <details class="config-hint">
+            <summary><svg width="14" height="14"><use href="#icon-info"/></svg> 两种配置方式 <span class="ch-arrow">▶</span></summary>
+            <div class="ch-body">
+              <div class="ch-method">方式一：在本页面配置</div>
+              点击上方 ＋ 按钮，或点击已有扩展卡片的 ✏️ 编辑。在表单中填写名称、命令（含凭证）、描述，保存后打开开关并点击 🔍 发现工具。
+              <div class="ch-method">方式二：直接编辑配置文件</div>
+              用任意文本编辑器打开配置文件，按相同格式手动修改：
+              <div class="ch-path">Seegent/.seegent-mcp.json</div>
+              <div class="ch-pre">{
+  "items": {
+    "feishu": {
+      "name": "飞书",
+      "icon": "🐦",
+      "description": "飞书 OpenAPI——消息、文档、日历、通讯录",
+      "command": "npx -y @larksuiteoapi/lark-mcp --app-id <span style="color:#e00">你的AppId</span> --app-secret <span style="color:#e00">你的AppSecret</span>",
+      "tutorial": "## 配置说明\n1. 前往飞书开放平台创建自建应用\n2. 将 App ID 和 App Secret 替换到上方命令中"
+    },
+    "fetch": {
+      "name": "网页获取",
+      "icon": "🌐",
+      "command": "npx -y @modelcontextprotocol/server-fetch"
+    }
+  },
+  "enabled": ["feishu", "fetch"]
+}</div>
+              <div class="ch-note">
+                <div style="font-weight:600;margin-bottom:4px"><svg width="12" height="12"><use href="#icon-info"/></svg> 安全提示</div>
+                凭证（App ID / Secret / Token）直接写在 <code>command</code> 字段中。更安全的做法是使用环境变量占位符，如 <code>--app-id \${FEISHU_APP_ID}</code>，然后在终端设置 <code>export FEISHU_APP_ID=xxx</code>。<br><br>
+                此文件已在 <code>.gitignore</code> 中，不会被 git 提交。扩展凭证仅存在本地，不经过任何中转服务器。<br><br>
+                飞书应用的 App ID / Secret 还可在 <span class="ch-path">Seegent/.seegent-feishu-credentials.json</span> 中统一管理，多个数据源共享同一凭证。
+              </div>
+            </div>
+          </details>
 
           <div class="mcp-card builtin-tool-card" style="margin-bottom:12px">
             <div class="mcp-card-body">
@@ -3063,6 +3097,19 @@ body {
             </div>
             <div class="config-card-actions">
               <span id="settings-theme-label" style="font-size:12px;color:var(--text-secondary)"></span>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="config-card-body">
+              <h4>向量检索</h4>
+              <p id="emb-settings-note" style="font-size:11px;color:var(--text-tertiary);line-height:1.6;margin-top:2px"></p>
+            </div>
+            <div class="config-card-actions">
+              <label class="skill-toggle" title="开启/关闭向量语义检索">
+                <input type="checkbox" id="emb-enable-toggle" onchange="toggleEmbeddingEnable(this.checked)">
+                <span class="slider"></span>
+              </label>
             </div>
           </div>
         </div>
@@ -6680,6 +6727,52 @@ function toggleTheme() {
   applyTheme(saved || (prefersDark ? 'dark' : 'light'));
 })();
 
+// ========== 向量检索开关（设置页） ==========
+const EMB_ENABLE_KEY = 'seegent-emb-enable';
+
+// 支持向量检索的模型（有原生 embedding API）
+// 不支持：DeepSeek、Anthropic、Kimi → 自动回退关键词搜索
+function embSupportedModels() {
+  return [
+    { name: 'OpenAI', models: 'text-embedding-3-small / large / ada-002' },
+    { name: 'MiniMax', models: 'embo-01' },
+    { name: '智谱 GLM', models: 'embedding-3' },
+    { name: '自定义', models: '任意 OpenAI 兼容的 embedding 端点' }
+  ];
+}
+
+function isModelEmbCapable(modelId) {
+  if (!modelId) return false;
+  const id = modelId.toLowerCase();
+  // 不支持向量检索的模型
+  if (id.includes('deepseek')) return false;
+  if (id.includes('claude') || id.includes('anthropic')) return false;
+  if (id.includes('kimi') || id.includes('moonshot')) return false;
+  return true;
+}
+
+function updateEmbSettingsNote() {
+  const el = document.getElementById('emb-settings-note');
+  if (!el) return;
+  const models = embSupportedModels();
+  const lines = models.map(m => m.name + '（' + m.models + '）');
+  el.innerHTML = '支持的模型：' + lines.join('、') + '。<br>开启后，选择上述模型时 AI 自动使用语义搜索；选择 DeepSeek 等不支持向量检索的模型时，自动回退为关键词搜索。';
+}
+
+function toggleEmbeddingEnable(enabled) {
+  try { localStorage.setItem(EMB_ENABLE_KEY, enabled ? '1' : '0'); } catch (_) {}
+}
+
+function isEmbeddingEnabled() {
+  try { return localStorage.getItem(EMB_ENABLE_KEY) !== '0'; } catch (_) { return true; }
+}
+
+function initSettingsEmbToggle() {
+  updateEmbSettingsNote();
+  const toggle = document.getElementById('emb-enable-toggle');
+  if (toggle) toggle.checked = isEmbeddingEnabled();
+}
+
 // ========== 启动：自动恢复已保存的文件夹 ==========
 let pendingRestore = []; // 需要用户手势重新授权的文件夹
 
@@ -6851,7 +6944,7 @@ function switchConfigTab(tabName) {
   }
 
   // 加载数据
-  if (tabName === 'model') { loadModelList(); loadEmbeddingConfig(); }
+  if (tabName === 'model') { loadModelList(); }
   if (tabName === 'mcp') { loadCliList(); renderMcpList(); loadMcpList(); }
   if (tabName === 'agent') { loadAgentConfig(); }
   if (tabName === 'skill') { loadSkillList(); }
@@ -6868,6 +6961,7 @@ function switchModule(name) {
   if (name === 'log') loadLogs();
   if (name === 'usage') { loadAiMonitor(); }
   if (name === 'board') { initDashboard(); }
+  if (name === 'settings') { initSettingsEmbToggle(); }
 }
 
 // ========== 模块切换结束 ==========
@@ -6894,13 +6988,12 @@ setTimeout(() => {
   fetch('/api/skills').then(r => r.json()).then(d => { skillConfig = d; }).catch(() => {});
   fetch('/api/ai-monitor').then(r => r.json()).then(d => { aiMonitorData = d; }).catch(() => {});
   fetch('/api/embedding-config').then(r => r.json()).then(d => {
-    document.getElementById('emb-provider').value = d.provider || '';
-    document.getElementById('emb-key').value = d.api_key || '';
-    document.getElementById('emb-url').value = d.base_url || '';
-    document.getElementById('emb-model').value = d.model || '';
-    onEmbProviderChange();
-    if (d.dimensions) document.getElementById('emb-status').textContent = '✅ 已配置（维度 ' + d.dimensions + '）';
     embConfigLoaded = true;
+    // 更新设置页的开关状态
+    const enabled = !!(d.api_key && d.base_url && d.model);
+    const toggle = document.getElementById('emb-enable-toggle');
+    if (toggle) toggle.checked = enabled;
+    updateEmbSettingsNote();
   }).catch(() => {});
 }, 100);
 
@@ -9885,7 +9978,10 @@ async function syncFeishuSource(sourceId) {
         credentialId: src.credentialId || '',
         appToken: src.appToken || '',
         tableId: src.tableId || '',
-        columnMapping: src.columnMapping, mode: 'sync',
+        columnMapping: src.columnMapping,
+        displayFields: src.displayFields || [],
+        dateField: src.dateField || '',
+        mode: 'sync',
         boundFolders: src.boundFolders || []
       })
     });
@@ -10269,18 +10365,21 @@ function openMcpModal(editId) {
     if (!m) return;
   }
   const html = '<div id="mcp-modal" class="prompt-modal open" onclick="if(event.target===this)closeMcpModal()">' +
-    '<div class="pm-box" style="width:560px">' +
-      '<div class="pm-header"><h3>' + (m ? '编辑 MCP 服务器' : '新增 MCP 服务器') + '</h3><button class="pm-close" onclick="closeMcpModal()"><svg width="18" height="18"><use href="#icon-close"/></svg></button></div>' +
+    '<div class="pm-box" style="width:580px">' +
+      '<div class="pm-header"><h3>' + (m ? '编辑扩展' : '新增扩展') + '</h3><button class="pm-close" onclick="closeMcpModal()"><svg width="18" height="18"><use href="#icon-close"/></svg></button></div>' +
       '<div class="pm-body">' +
-        '<div class="pm-field"><label>ID（唯一标识，英文）</label><input id="mcp-id" value="' + escapeHtml(editId || '') + '" placeholder="如：feishu / notion / fetch" ' + (m ? 'disabled style="background:#f5f5f5"' : '') + '></div>' +
-        '<div class="pm-field"><label>名称</label><input id="mcp-name" value="' + escapeHtml(m ? m.name : '') + '" placeholder="显示名称，如：飞书 MCP"></div>' +
-        '<div class="pm-field"><label>启动命令</label><input id="mcp-cmd" value="' + escapeHtml(m ? m.command : '') + '" placeholder="如：npx -y @modelcontextprotocol/server-filesystem ~/Desktop"></div>' +
-        '<div class="pm-field"><label>描述</label><input id="mcp-desc" value="' + escapeHtml(m ? m.description : '') + '" placeholder="一句话描述这个 MCP 能做什么"></div>' +
-        '<div class="pm-field"><label>使用说明（支持 Markdown）</label><textarea id="mcp-tutorial" rows="6" placeholder="配置步骤、使用示例、注意事项..." style="width:100%;padding:8px 12px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:6px;font-family:var(--font);resize:vertical">' + escapeHtml(m ? m.tutorial || '' : '') + '</textarea></div>' +
+        '<div class="pm-field"><label>ID（唯一标识，英文）</label><input id="mcp-id" value="' + escapeHtml(editId || '') + '" placeholder="如：feishu / notion / fetch" ' + (m ? 'disabled style="background:var(--bg-input);color:var(--text-secondary);opacity:0.7"' : '') + '></div>' +
+        '<div class="pm-field"><label>名称</label><input id="mcp-name" value="' + escapeHtml(m ? m.name : '') + '" placeholder="显示名称，如：飞书"></div>' +
+        '<div class="pm-field"><label>描述</label><input id="mcp-desc" value="' + escapeHtml(m ? m.description : '') + '" placeholder="一句话描述，如：发送消息、创建文档、管理日历"></div>' +
+        '<div class="pm-field" style="margin-bottom:0"><label style="display:flex;align-items:center;gap:6px">启动命令 <span style="font-weight:400;font-size:11px;color:#e00">← 凭证填在这里</span></label></div>' +
+        '<div style="font-size:11px;color:var(--text-tertiary);margin:-10px 0 8px;line-height:1.6">MCP 服务器的启动命令。需要认证的服务，将 App ID / Secret / Token 直接写在命令参数中。<br>此命令会原样存入 <span class="ch-path">.seegent-mcp.json</span>，保存后立即生效。</div>' +
+        '<div class="pm-field"><input id="mcp-cmd" value="' + escapeHtml(m ? m.command : '') + '" placeholder="npx -y @larksuiteoapi/lark-mcp --app-id ${FEISHU_APP_ID} --app-secret ${FEISHU_APP_SECRET}" style="font-family:var(--font-mono);font-size:12px"></div>' +
+        '<div style="margin:12px 0;border-top:1px solid var(--border)"></div>' +
+        '<div class="pm-field"><label>使用说明（Markdown，可选）</label><p style="font-size:11px;color:var(--text-tertiary);margin:2px 0 6px">写给用户的配置教程。告诉用户去哪里申请凭证、如何设置环境变量、有哪些可用工具。</p><textarea id="mcp-tutorial" rows="5" placeholder="## 配置步骤\n1. 前往飞书开放平台创建自建应用\n2. 复制 App ID 和 App Secret\n3. 设置环境变量：export FEISHU_APP_ID=xxx\n\n## 可用工具\n- 发送消息\n- 创建文档\n..." style="width:100%;padding:8px 12px;font-size:12px;line-height:1.5;border:1px solid var(--border);border-radius:6px;font-family:var(--font);resize:vertical">' + escapeHtml(m ? m.tutorial || '' : '') + '</textarea></div>' +
       '</div>' +
       '<div class="pm-footer" style="padding:0 24px 20px;display:flex;justify-content:flex-end;gap:8px">' +
         '<button class="btn-cancel" onclick="closeMcpModal()" style="padding:8px 20px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;font-size:13px">取消</button>' +
-        '<button class="btn-primary" onclick="saveMcp(\'' + (editId || '') + '\')" style="padding:8px 20px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px">保存</button>' +
+        '<button class="btn-primary" onclick="saveMcp(\'' + (editId || '') + '\')" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-family:var(--font);font-weight:600">保存</button>' +
       '</div>' +
     '</div>' +
   '</div>';
